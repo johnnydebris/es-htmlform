@@ -1,19 +1,46 @@
+//! htmlform is a library for parsing, validating and generating HTML forms
+//!
+//! ```rust
+//! use htmlform::{HtmlForm, ValueMap, Element, InputType, Constraint, Attr};
+//!
+//! fn main() {
+//!     let values = ValueMap::from_urlencoded(b"foo=bar&spam=15").unwrap();
+//!     let form = HtmlForm::new()
+//!         .input(
+//!             InputType::Text, "foo", "Foo", false, None,
+//!             vec![Constraint::MinLength(0), Constraint::MaxLength(10)],
+//!             vec![])
+//!         .input(
+//!             InputType::Number, "spam", "Spam", false, None,
+//!             vec![Constraint::MinNumber(0.0), Constraint::MaxNumber(10.0)],
+//!             vec![Attr::Step(0.1)])
+//!         .validate_and_set(values);
+//!
+//!     assert_eq!(form.errors.len(), 1);
+//!     assert_eq!(form.get::<String>("foo").unwrap(), vec!["bar"]);
+//!     assert_eq!(form.get::<f64>("spam").unwrap(), vec![15.0]);
+//!     assert_eq!(form.errors.get("spam").unwrap(), "value too high");
+//! }
+//! ```
+
 use std::fmt;
 use std::str::FromStr;
 use std::error::Error;
 use std::ops::Deref;
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use regex::Regex;
 
+/// Error raised when `urldecode()` fails.
 #[derive(Debug, PartialEq)]
 pub struct UrlDecodingError {
     message: String,
 }
 
 impl UrlDecodingError {
-    fn new(message: &str) -> UrlDecodingError {
+    pub fn new(message: &str) -> UrlDecodingError {
         UrlDecodingError {
             message: String::from(message),
         }
@@ -56,7 +83,6 @@ impl From<std::num::ParseIntError> for UrlDecodingError {
     }
 }
 
-
 pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError> {
     let percent: u8 = 37;
     let mut out: Vec<u8> = Vec::new();
@@ -88,6 +114,7 @@ pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError> {
     Ok(std::str::from_utf8(&out)?.to_string())
 }
 
+#[derive(Debug)]
 pub enum ContentType {
     Urlencoded,
     // XXX not yet...
@@ -95,6 +122,7 @@ pub enum ContentType {
     Json,
 }
 
+#[derive(Debug)]
 pub enum InputType {
     Text,
     Password,
@@ -116,11 +144,13 @@ pub enum InputType {
     Hidden,
 }
 
+#[derive(Debug)]
 pub enum Select {
     Single,
     Multi,
 }
 
+#[derive(Debug)]
 pub enum Element {
     Input(InputType),
     Textarea,
@@ -128,7 +158,7 @@ pub enum Element {
 }
 
 impl Element {
-    fn fieldtype(&self) -> String {
+    pub fn fieldtype(&self) -> String {
         String::from(match &self {
             Element::Input(_) => "input",
             Element::Textarea => "textarea",
@@ -136,7 +166,7 @@ impl Element {
         })
     }
 
-    fn subtype(&self) -> String {
+    pub fn subtype(&self) -> String {
         String::from(match &self {
             Element::Input(input_type) => match input_type {
                 InputType::Text => "text",
@@ -162,7 +192,7 @@ impl Element {
         })
     }
 
-    fn multi(&self) -> bool {
+    pub fn multi(&self) -> bool {
         match self {
             Element::Input(InputType::Checkbox) =>
                 true,
@@ -172,6 +202,7 @@ impl Element {
     }
 }
 
+#[derive(Debug)]
 pub enum Constraint {
     MinLength(usize),
     MaxLength(usize),
@@ -193,19 +224,19 @@ impl Constraint {
             Constraint::MaxLength(max) => {
                 let value: String = formvalue.into()?;
                 if value.len() > *max {
-                    return Err(ValidationError::new("value too short"));
+                    return Err(ValidationError::new("value too long"));
                 }
             },
             Constraint::MinNumber(min) => {
                 let value: f64 = formvalue.into()?;
                 if value < *min {
-                    return Err(ValidationError::new("value too small"));
+                    return Err(ValidationError::new("value too low"));
                 }
             },
             Constraint::MaxNumber(max) => {
                 let value: f64 = formvalue.into()?;
                 if value > *max {
-                    return Err(ValidationError::new("value too large"));
+                    return Err(ValidationError::new("value too high"));
                 }
             },
             Constraint::Pattern(pattern) => {
@@ -216,58 +247,48 @@ impl Constraint {
                         ValidationError::new("invalid pattern")),
                 };
                 if !reg.is_match(&value) {
-                    return Err(ValidationError::new("pattern did not match"));
+                    return Err(
+                        ValidationError::new("pattern did not match"));
                 }
             },
         }
         Ok(())
     }
-}
 
-impl Serialize for Constraint {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where S: Serializer {
-        let (attr, value) = match self {
-            Constraint::MinLength(value) =>
-                ("minlength", format!("{}", value)),
-            Constraint::MaxLength(value) =>
-                ("maxlength", format!("{}", value)),
-            Constraint::MinNumber(value) =>
-                ("min", format!("{}", value)),
-            Constraint::MaxNumber(value) =>
-                ("max", format!("{}", value)),
+    pub fn attrpair(&self) -> (String, String) {
+        let (name, value) = match self {
+            Constraint::MinLength(min) => ("minlength", min.to_string()),
+            Constraint::MaxLength(max) => ("maxlength", max.to_string()),
+            Constraint::MinNumber(min) => ("min", min.to_string()),
+            Constraint::MaxNumber(max) => ("max", max.to_string()),
             Constraint::Pattern(pattern) => ("pattern", pattern.clone()),
         };
-        let mut s = serializer.serialize_struct("Constraint", 2)?;
-        s.serialize_field("attr", &attr)?;
-        s.serialize_field("value", &value)?;
-        s.end()
+        (String::from(name), value)
     }
 }
 
+#[derive(Debug)]
 pub enum Attr {
+    Any(String, String),
     Step(f64),
 }
 
-impl Serialize for Attr {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where S: Serializer {
-        let (attr, value) = match self {
-            Attr::Step(value) =>
-                ("step", format!("{}", value)),
+impl Attr {
+    pub fn attrpair(&self) -> (String, String) {
+        let (name, value) = match self {
+            Attr::Any(name, value) => (name.deref(), value.clone()),
+            Attr::Step(step) => ("step", step.to_string()),
         };
-        let mut s = serializer.serialize_struct("Attr", 2)?;
-        s.serialize_field("attr", &attr)?;
-        s.serialize_field("value", &value)?;
-        s.end()
+        (String::from(name), value)
     }
 }
 
 // XXX make translatable later
+#[derive(Debug)]
 pub struct Label(String);
 
 impl Label {
-    fn new(label: &str) -> Label {
+    pub fn new(label: &str) -> Label {
         Label(String::from(label))
     }
 }
@@ -287,8 +308,9 @@ impl Serialize for Label {
     }
 }
 
+#[derive(Debug)]
 pub struct HtmlForm {
-    errors: HashMap<String, String>,
+    pub errors: HashMap<String, String>,
     fields: Vec<Field>,
 }
 
@@ -308,8 +330,7 @@ impl HtmlForm {
         }
     }
 
-    pub fn validate_and_set(
-            mut self, values: &ValueMap)
+    pub fn validate_and_set(mut self, values: ValueMap)
             -> Self {
         for field in &mut self.fields {
             let non_empty = values.non_empty_values(&field.name);
@@ -319,13 +340,14 @@ impl HtmlForm {
                         field.name.clone(),
                         String::from("field can only have one value"));
                 } else {
-                    match field.validate_and_set(&non_empty) {
+                    match field.validate(&non_empty) {
                         Err(e) => {
                             self.errors.insert(
                                 field.name.clone(), format!("{}", e));
                         },
                         Ok(()) => (),
                     }
+                    field.set_values(non_empty);
                 }
             } else {
                 // set default (empty) value
@@ -343,67 +365,64 @@ impl HtmlForm {
         self
     }
 
-    pub fn textinput(
-            mut self, name: &str, label: &str, required: bool,
-            minlength: usize, maxlength: Option<usize>,
-            pattern: Option<&str>)
-            -> Self {
-        let mut constraints = vec![Constraint::MinLength(minlength)];
-        match maxlength {
-            Some(maxlength) => {
-                constraints.push(Constraint::MaxLength(maxlength));
-            },
-            None => (),
+    pub fn get<T>(&self, name: &str) ->
+            Result<Vec<T>, FormError>
+            where T: FromStr {
+        for field in &self.fields {
+            if field.name == name {
+                return match &field.value {
+                    Some(values) => {
+                        let mut converted: Vec<T> = Vec::new();
+                        for value in values {
+                            converted.push(value.into()?);
+                        }
+                        Ok(converted)
+                    },
+                    None => Err(
+                        FormError::new("can not convert field value")),
+                };
+            }
         }
-        match pattern {
-            Some(pattern) => {
-                constraints.push(
-                    Constraint::Pattern(String::from(pattern)));
-            },
-            None => (),
-        }
-        self.fields.push(Field::new(
-            name, Label::new(label), Element::Input(InputType::Text),
-            required, None, constraints, vec![]));
-        self
+        Err(FormError::new("field not found"))
     }
 
-    pub fn numberinput(
-            mut self, name: &str, label: &str, required: bool,
-            min: Option<f64>, max: Option<f64>, step: Option<f64>)
+    pub fn attr(&mut self, name: &str, attribute: Attr) ->
+            Result<(), FormError> {
+        for field in &self.fields {
+            if field.name == name {
+                field.attributes.lock().unwrap().push(attribute);
+                return Ok(());
+            }
+        }
+        Err(FormError::new("field not found"))
+    }
+
+    pub fn input(
+            mut self, input_type: InputType, name: &str, label: &str,
+            required: bool, value: Option<Value>,
+            constraints: Vec<Constraint>, attributes: Vec<Attr>)
             -> Self {
-        let mut constraints = vec![];
-        match min {
-            Some(min) => {
-                constraints.push(Constraint::MinNumber(min));
-            },
-            None => (),
-        }
-        match max {
-            Some(max) => {
-                constraints.push(Constraint::MaxNumber(max));
-            },
-            None => (),
-        }
-        let mut attributes = vec![];
-        match step {
-            Some(step) => {
-                attributes.push(Attr::Step(step));
-            },
-            None => (),
-        }
+        let values = match value {
+            Some(value) => Some(vec![value]),
+            None => None,
+        };
         self.fields.push(Field::new(
-            name, Label::new(label), Element::Input(InputType::Number),
-            required, None, constraints, attributes));
+            name, Label::new(label), Element::Input(input_type),
+            required, None, values, constraints, attributes));
         self
     }
 
     pub fn textarea(
-            mut self, name: &str, label: &str, required: bool)
+            mut self, name: &str, label: &str, required: bool,
+            value: Option<Value>, attributes: Vec<Attr>)
             -> Self {
+        let values = match value {
+            Some(value) => Some(vec![value]),
+            None => None,
+        };
         self.fields.push(Field::new(
             name, Label::new(label), Element::Textarea,
-            required, None, vec![], vec![]));
+            required, None, values, vec![], attributes));
         self
     }
 }
@@ -418,6 +437,7 @@ impl Serialize for HtmlForm {
     }
 }
 
+#[derive(Debug)]
 pub struct Field {
     name: String,
     label: Label,
@@ -426,16 +446,16 @@ pub struct Field {
     required: bool,
     multi: bool,
     choices: Vec<(String, Label)>,
-    value: Option<Value>,
-    multi_value: Option<Vec<Value>>,
-    attributes: Vec<Attr>,
+    value: Option<Vec<Value>>,
+    attributes: Mutex<Vec<Attr>>,
     constraints: Vec<Constraint>,
 }
 
 impl Field {
-    fn new(name: &str, label: Label, element: Element, required: bool,
+    pub fn new(name: &str, label: Label, element: Element, required: bool,
             choices: Option<Vec<(String, Label)>>,
-            constraints: Vec<Constraint>, attributes: Vec<Attr>)
+            value: Option<Vec<Value>>, constraints: Vec<Constraint>,
+            attributes: Vec<Attr>)
             -> Field {
         Field {
             name: String::from(name),
@@ -449,30 +469,31 @@ impl Field {
                 None => Vec::new(),
             },
             constraints: constraints,
-            attributes: attributes,
-            value: None,
-            multi_value: None,
+            attributes: Mutex::new(attributes),
+            value: value,
         }
     }
 
-    fn validate_and_set(&self, values: &Vec<&Value>)
+    pub fn validate(&self, values: &Vec<&Value>)
             -> Result<(), ValidationError> {
-        if self.required && values.len() > 0 &&
-                values[0].into::<String>()? == String::from("") {
-            for constraint in self.constraints.iter() {
-                for value in values.iter() {
-                    constraint.validate(&value)?;
-                }
+        for constraint in self.constraints.iter() {
+            for value in values.iter() {
+                constraint.validate(&value)?;
             }
         }
         Ok(())
     }
 
-    fn set_default_value(&mut self) {
-        match self.multi {
-            true => self.multi_value = Some(Vec::new()),
-            false => self.value = Some(Value {value: String::from("")}),
-        };
+    pub fn set_default_value(&mut self) {
+        self.value = Some(Vec::new());
+    }
+
+    pub fn set_values(&mut self, values: Vec<&Value>) {
+        let mut clone = Vec::new();
+        for value in values {
+            clone.push(Value {value: value.value.clone()});
+        }
+        self.value = Some(clone);
     }
 }
 
@@ -487,14 +508,41 @@ impl Serialize for Field {
         s.serialize_field("required", &self.required)?;
         s.serialize_field("multi", &self.multi)?;
         s.serialize_field("choices", &self.choices)?;
-        s.serialize_field("constraints", &self.constraints)?;
-        s.serialize_field("attributes", &self.attributes)?;
-        match self.multi {
+
+        // attributes combines self.constraints and self.attributes
+        let mut attributesmap = HashMap::new();
+        for constraint in &self.constraints {
+            let (name, value) = constraint.attrpair();
+            attributesmap.insert(name, value);
+        }
+        for attribute in self.attributes.lock().unwrap().iter() {
+            let (name, value) = attribute.attrpair();
+            attributesmap.insert(name, value);
+        }
+        s.serialize_field("attributes", &attributesmap)?;
+
+        // value is a single value (or None) if self.multi == false,
+        // else it's a list
+        match &self.multi {
             true => {
-                s.serialize_field("value", &self.multi_value)?;
+                s.serialize_field("value", &self.value)?;
             },
             false => {
-                s.serialize_field("value", &self.value)?;
+                match &self.value {
+                    Some(value) => {
+                        match value.len() {
+                            1 => {
+                                s.serialize_field("value", &value[0])?;
+                            },
+                            _ => {
+                                s.serialize_field("value", &"")?;
+                            },
+                        };
+                    },
+                    None => {
+                        s.serialize_field("value", &self.value)?;
+                    },
+                };
             },
         }
         s.end()
@@ -507,7 +555,7 @@ pub struct ValueMap {
 }
 
 impl ValueMap {
-    fn non_empty_values(&self, key: &str) -> Vec<&Value> {
+    pub fn non_empty_values(&self, key: &str) -> Vec<&Value> {
         let values = match self.values.get(key) {
             Some(value) => value,
             None => return Vec::new(),
@@ -584,13 +632,13 @@ pub struct Value {
 }
 
 impl Value {
-    fn new(value: &str) -> Value {
+    pub fn new(value: &str) -> Value {
         Value {
             value: String::from(value),
         }
     }
 
-    fn into<T>(&self) -> Result<T, ValidationError>
+    pub fn into<T>(&self) -> Result<T, ValidationError>
             where T: FromStr {
         match self.value.parse() {
             Ok(value) => Ok(value),
@@ -615,12 +663,43 @@ impl Serialize for Value {
 }
 
 #[derive(Debug)]
+pub struct FormError {
+    message: String,
+}
+
+impl FormError {
+    pub fn new(message: &str) -> FormError {
+        FormError {
+            message: String::from(message),
+        }
+    }
+}
+
+impl fmt::Display for FormError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl Error for FormError {
+    fn description(&self) -> &str {
+        &self.message
+    }
+}
+
+impl From<ValidationError> for FormError {
+    fn from(e: ValidationError) -> FormError {
+        FormError::new(&e.to_string())
+    }
+}
+
+#[derive(Debug)]
 pub struct ValidationError {
     message: String,
 }
 
 impl ValidationError {
-    fn new(message: &str) -> ValidationError {
+    pub fn new(message: &str) -> ValidationError {
         ValidationError {
             message: String::from(message),
         }
@@ -641,14 +720,30 @@ impl Error for ValidationError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{HtmlForm, Value, ValueMap, UrlDecodingError};
+    use crate::{
+        HtmlForm, Value, ValueMap, UrlDecodingError, InputType, Attr,
+        Constraint};
 
     fn testform() -> HtmlForm {
         HtmlForm::new()
-            .textinput("foo", "Foo", true, 0, Some(10), None)
-            .textinput("bar", "Bar", true, 0, None, Some("^[a-z]+$"))
-            .numberinput(
-                "baz", "Baz", false, Some(-10.0), Some(10.0), Some(1.0))
+            .input(
+                InputType::Text, "foo", "Foo", true, None,
+                vec![Constraint::MinLength(0), Constraint::MaxLength(10)],
+                vec![])
+            .input(
+                InputType::Text, "bar", "Bar", true, None,
+                vec![
+                    Constraint::MinLength(0),
+                    Constraint::MaxLength(10),
+                    Constraint::Pattern("^[a-z]+$".to_string())],
+                vec![])
+            .input(
+                InputType::Number, "baz", "Baz", false, None,
+                vec![
+                    Constraint::MinNumber(0.0),
+                    Constraint::MaxNumber(10.0),
+                ],
+                vec![Attr::Step(0.1)])
     }
 
     #[test]
@@ -709,10 +804,10 @@ mod tests {
 
     #[test]
     fn test_form_validation_success() {
-        let values = ValueMap::from_urlencoded(b"foo=1&bar=2&baz=3").unwrap();
+        let values = ValueMap::from_urlencoded(
+            b"foo=1&bar=abc&baz=3").unwrap();
         let form = testform()
-            .validate_and_set(&values);
-        println!("errors: {:?}", form.errors);
+            .validate_and_set(values);
         assert_eq!(form.errors.len(), 0);
     }
 
@@ -720,10 +815,10 @@ mod tests {
     fn test_form_validation_missing_required() {
         let values = ValueMap::from_urlencoded(b"foo=1&baz=3").unwrap();
         let form = testform()
-            .validate_and_set(&values);
-        println!("errors: {:?}", form.errors);
+            .validate_and_set(values);
         assert_eq!(form.errors.len(), 1);
-        assert_eq!(form.errors.keys().collect::<Vec<&String>>(), vec!["bar"]);
+        assert_eq!(
+            form.errors.keys().collect::<Vec<&String>>(), vec!["bar"]);
         assert_eq!(
             form.errors.values().collect::<Vec<&String>>(),
             vec!["no value for required field"]);
