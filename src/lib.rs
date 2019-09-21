@@ -7,6 +7,87 @@ use std::collections::HashMap;
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use regex::Regex;
 
+#[derive(Debug, PartialEq)]
+pub struct UrlDecodingError {
+    message: String,
+}
+
+impl UrlDecodingError {
+    fn new(message: &str) -> UrlDecodingError {
+        UrlDecodingError {
+            message: String::from(message),
+        }
+    }
+}
+
+impl fmt::Display for UrlDecodingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl Error for UrlDecodingError {
+    fn description(&self) -> &str {
+        &self.message
+    }
+}
+
+impl From<std::str::Utf8Error> for UrlDecodingError {
+    fn from(_e: std::str::Utf8Error) -> UrlDecodingError {
+        UrlDecodingError {
+            message: "invalid encoding error sequence".to_string(),
+        }
+    }
+}
+
+impl From<hex::FromHexError> for UrlDecodingError {
+    fn from(_e: hex::FromHexError) -> UrlDecodingError {
+        UrlDecodingError {
+            message: "invalid encoding sequence".to_string(),
+        }
+    }
+}
+
+impl From<std::num::ParseIntError> for UrlDecodingError {
+    fn from(_e: std::num::ParseIntError) -> UrlDecodingError {
+        UrlDecodingError {
+            message: "invalid encoding character".to_string(),
+        }
+    }
+}
+
+
+pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError> {
+    let percent: u8 = 37;
+    let mut out: Vec<u8> = Vec::new();
+    let mut i = 0;
+    while i < input.len() {
+        let chr: u8 = input[i];
+        let charcode: u8;
+        i += 1;
+        if chr == percent {
+            if input.len() < i + 2 {
+                return Err(
+                    UrlDecodingError::new("missing encoding character"));
+            }
+            // we now have 2 ascii chars (u8), which should be numbers,
+            // depicting 2 character a hexdecimal number when combined, which
+            // form the ascii value of 1 char (so another u8, unicode is
+            // encoded as multiple u8s in a row, each with a separate
+            // %, so if we handle the chars 1 at a time, we should end up
+            // with a valid utf-8 sequence, assuming the character encoding
+            // is utf-8 (XXX and what if it isn't?))
+            charcode = hex::decode(
+                &format!("{}{}", input[i] as char, input[i + 1] as char))?[0];
+            i += 2;
+        } else {
+            charcode = chr;
+        }
+        out.push(charcode);
+    }
+    Ok(std::str::from_utf8(&out)?.to_string())
+}
+
 pub enum ContentType {
     Urlencoded,
     // XXX not yet...
@@ -420,6 +501,7 @@ impl Serialize for Field {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct ValueMap {
     values: HashMap<String, Vec<Value>>,
 }
@@ -438,6 +520,54 @@ impl ValueMap {
             .collect()
     }
 
+    pub fn from_urlencoded(input: &[u8]) ->
+            Result<ValueMap, UrlDecodingError> {
+        let mut values: HashMap<String, Vec<Value>> = HashMap::new();
+        let eq: u8 = 61;
+        let amp: u8 = 38;
+        let mut bkey = vec![];
+        let mut bvalue = vec![];
+        let mut in_value = false;
+        for ref chr in input {
+            let chr = *chr.clone();
+            if chr == eq {
+                if !in_value {
+                    in_value = true;
+                } else {
+                    return Err(
+                        UrlDecodingError::new("unexpected = character"));
+                }
+            } else if chr == amp {
+                let key = urldecode(&bkey)?;
+                let value = urldecode(&bvalue)?;
+                if bvalue.len() > 0 && values.contains_key(&key) {
+                    let keyvalues = values.get_mut(&key).unwrap();
+                    keyvalues.push(Value::new(&value));
+                } else {
+                    values.insert(key, vec![Value::new(&value)]);
+                }
+                bkey.truncate(0);
+                bvalue.truncate(0);
+                in_value = false;
+            } else if in_value {
+                bvalue.push(chr);
+            } else {
+                bkey.push(chr);
+            }
+        }
+        // there should now be 1 key (or pair) left in the buffers
+        if bkey.len() > 0{
+            let key = urldecode(&bkey)?;
+            let value = urldecode(&bvalue)?;
+            if bvalue.len() > 0 && values.contains_key(&key) {
+                let keyvalues = values.get_mut(&key).unwrap();
+                keyvalues.push(Value::new(&value));
+            } else {
+                values.insert(key, vec![Value::new(&value)]);
+            }
+        }
+        Ok(ValueMap {values: values})
+    }
 }
 
 impl Deref for ValueMap {
@@ -448,11 +578,18 @@ impl Deref for ValueMap {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct Value {
     value: String,
 }
 
 impl Value {
+    fn new(value: &str) -> Value {
+        Value {
+            value: String::from(value),
+        }
+    }
+
     fn into<T>(&self) -> Result<T, ValidationError>
             where T: FromStr {
         match self.value.parse() {
@@ -504,18 +641,91 @@ impl Error for ValidationError {
 
 #[cfg(test)]
 mod tests {
-    fn testform() -> crate::HtmlForm {
-        crate::HtmlForm::new()
-            .textinput("foo", "Foo", true, 0, Some(128), None)
+    use crate::{HtmlForm, Value, ValueMap, UrlDecodingError};
+
+    fn testform() -> HtmlForm {
+        HtmlForm::new()
+            .textinput("foo", "Foo", true, 0, Some(10), None)
             .textinput("bar", "Bar", true, 0, None, Some("^[a-z]+$"))
             .numberinput(
                 "baz", "Baz", false, Some(-10.0), Some(10.0), Some(1.0))
     }
 
     #[test]
+    fn test_parse_urlencoded_one_key_one_val() {
+        let values = ValueMap::from_urlencoded(b"foo=1").unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(
+            values.get("foo").unwrap(), &vec![Value::new("1")]);
+    }
+
+    #[test]
+    fn test_parse_urlencoded_one_key_no_val() {
+        let values = ValueMap::from_urlencoded(b"foo").unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(
+            values.get("foo").unwrap(), &vec![Value::new("")]);
+    }
+
+    #[test]
+    fn test_parse_urlencoded_one_key_two_vals() {
+        let values = ValueMap::from_urlencoded(b"foo=1&foo=2").unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(
+            values.get("foo").unwrap(),
+            &vec![Value::new("1"), Value::new("2")]);
+    }
+
+    #[test]
+    fn test_parse_urlencoded_two_keys() {
+        let values = ValueMap::from_urlencoded(b"foo=1&bar=2").unwrap();
+        assert_eq!(values.len(), 2);
+        assert_eq!(
+            values.get("foo").unwrap(), &vec![Value::new("1")]);
+        assert_eq!(
+            values.get("bar").unwrap(), &vec![Value::new("2")]);
+    }
+
+    #[test]
+    fn test_parse_urlencoded_encoded_correctly() {
+        let values = ValueMap::from_urlencoded(b"foo=foo%20bar").unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(
+            values.get("foo").unwrap(), &vec![Value::new("foo bar")]);
+    }
+
+    #[test]
+    fn test_parse_urlencoded_encoded_invalid_char() {
+        assert_eq!(
+            ValueMap::from_urlencoded(b"foo=foo%2xbar"),
+            Err(UrlDecodingError::new("invalid encoding sequence")));
+    }
+
+    #[test]
     fn test_form_build() {
         let form = testform();
-        println!("{}", serde_json::to_string(&form).unwrap());
         assert_eq!(form.fields.len(), 3);
+    }
+
+    #[test]
+    fn test_form_validation_success() {
+        let values = ValueMap::from_urlencoded(b"foo=1&bar=2&baz=3").unwrap();
+        let form = testform()
+            .validate_and_set(&values);
+        println!("errors: {:?}", form.errors);
+        assert_eq!(form.errors.len(), 0);
+    }
+
+    #[test]
+    fn test_form_validation_missing_required() {
+        let values = ValueMap::from_urlencoded(b"foo=1&baz=3").unwrap();
+        let form = testform()
+            .validate_and_set(&values);
+        println!("errors: {:?}", form.errors);
+        assert_eq!(form.errors.len(), 1);
+        assert_eq!(form.errors.keys().collect::<Vec<&String>>(), vec!["bar"]);
+        assert_eq!(
+            form.errors.values().collect::<Vec<&String>>(),
+            vec!["no value for required field"]);
     }
 }
