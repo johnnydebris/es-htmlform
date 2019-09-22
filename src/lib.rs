@@ -119,6 +119,7 @@ impl From<std::num::ParseIntError> for UrlDecodingError {
 }
 
 pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError> {
+    let plus: u8 = 43;
     let percent: u8 = 37;
     let mut out: Vec<u8> = Vec::new();
     let mut i = 0;
@@ -141,6 +142,9 @@ pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError> {
             charcode = hex::decode(
                 &format!("{}{}", input[i] as char, input[i + 1] as char))?[0];
             i += 2;
+        } else if chr == plus {
+            // stupid + signs in GET to replace spaces
+            charcode = 32 // space
         } else {
             charcode = chr;
         }
@@ -972,7 +976,7 @@ impl Error for ValidationError {
 mod tests {
     use crate::{
         HtmlForm, Value, ValueMap, UrlDecodingError, InputType, Attr,
-        Constraint};
+        Constraint, urldecode};
 
     fn testform() -> HtmlForm {
         HtmlForm::new()
@@ -1044,6 +1048,11 @@ mod tests {
         assert_eq!(
             ValueMap::from_urlencoded(b"foo=foo%2xbar"),
             Err(UrlDecodingError::new("invalid encoding sequence")));
+    }
+
+    #[test]
+    fn test_parse_urldecode_plus() {
+        assert_eq!(urldecode(b"+").unwrap(), " ");
     }
 
     #[test]
