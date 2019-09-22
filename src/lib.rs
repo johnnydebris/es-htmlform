@@ -3,7 +3,7 @@
 //! ```rust
 //! use regex::Regex;
 //! use htmlform::{
-//!     HtmlForm, ValueMap, InputType, Constraint as CS, Attr,
+//!     HtmlForm, ValueMap, InputType, Constraint as Cons, Attr,
 //!     FormError, ValidationError};
 //!
 //! fn userform() -> Result<HtmlForm, FormError> {
@@ -11,39 +11,36 @@
 //!         .input(
 //!             InputType::Text, "username", "Username", true, None,
 //!             vec![
-//!                 CS::MinLength(5), CS::MaxLength(16),
-//!                 CS::Pattern(r"^\w+$".to_string())],
+//!                 Cons::MinLength(5), Cons::MaxLength(16),
+//!                 Cons::Pattern(r"^\w+$".to_string())],
 //!             vec![])?
 //!         .input(
 //!             InputType::Text, "name", "Full name", true, None,
-//!             vec![CS::MinLength(0), CS::MaxLength(64)], vec![])?
+//!             vec![Cons::MinLength(0), Cons::MaxLength(64)], vec![])?
 //!         .input(
 //!             InputType::Password, "password", "Password", true, None,
 //!             vec![
-//!                 CS::MinLength(6), CS::MaxLength(64),
-//!                 CS::Pattern(r"[^a-zA-Z]".to_string()),
-//!                 CS::Func(Box::new(|ref value| {
-//!                     let reg_number = Regex::new(r"\d").unwrap();
-//!                     let reg_other = Regex::new(r"[^\w\s\d]").unwrap();
-//!                     // we want at least 2 matches, so 3 parts
-//!                     if !reg_number.is_match(value) ||
-//!                             !reg_other.is_match(value) {
-//!                         Err(ValidationError::new(
-//!                             "must contain 1 number and 1 non-word char"))
-//!                     } else {
-//!                         Ok(())
+//!                 Cons::MinLength(6), Cons::MaxLength(64),
+//!                 Cons::Pattern(
+//!                     r"(\d.*[^\w\s\d]|[^\w\s\d].*\d)".to_string()),
+//!                 Cons::Func(Box::new(|value| {
+//!                     match value.as_str() {
+//!                         "foobar-123" =>
+//!                             Err(ValidationError::new(
+//!                                 "password too simple!")),
+//!                         _ => Ok(()),
 //!                     }
 //!                 })),
 //!             ],
 //!             vec![])?
 //!         .input(
 //!             InputType::Number, "age", "Age", true, None,
-//!             vec![CS::MinNumber(18.0)],
+//!             vec![Cons::MinNumber(18.0)],
 //!             vec![
 //!                 Attr::Step(1.0),
 //!                 Attr::Any("id".to_string(), "age".to_string())])?
-//!         .textarea("message", "Message", false, None, vec![])
-//!         .submit(None, "Submit", vec![])
+//!         .textarea("message", "Message", false, None, vec![])?
+//!         .submit(None, "Submit", vec![])?
 //!     )
 //! }
 //!
@@ -53,8 +50,11 @@
 //!     ).unwrap();
 //!     let form = userform().unwrap().validate_and_set(values);
 //!
-//!     println!("errors: {:?}", form.errors);
-//!     assert_eq!(form.errors.len(), 0);
+//!     assert_eq!(form.errors.len(), 1);
+//!     assert_eq!(
+//!         form.errors.get("password").unwrap(), "password too simple!");
+//!     assert_eq!(form.getone::<String>("username").unwrap(), "johnny");
+//!     assert_eq!(form.getone::<String>("password").unwrap(), "foobar-123");
 //! }
 //! ```
 
@@ -535,17 +535,19 @@ impl HtmlForm {
     /// field is not found, when more than one value is found, when the
     /// value can not be converted (parsed) or when the field has no value.
     pub fn getone<T>(&self, name: &str) ->
-            Result<Vec<T>, FormError>
+            Result<T, FormError>
             where T: FromStr {
         for field in &self.fields {
             if field.name == name {
                 return match &field.value {
                     Some(_) => {
-                        let mut converted: Vec<T> = Vec::new();
-                        for value in field.values() {
-                            converted.push(value.parse()?);
+                        let values = field.values();
+                        if values.len() == 1 {
+                            Ok(values[0].parse()?)
+                        } else {
+                            Err(FormError::new(
+                                "field has more than one value"))
                         }
-                        Ok(converted)
                     },
                     None => Err(
                         FormError::new("field has no value")),
@@ -571,7 +573,7 @@ impl HtmlForm {
     /// fields (so not for `InputType::Radio` or `InputType::Checkbox`).
     /// Returns self, so calls can be chained.
     pub fn input(
-            mut self, input_type: InputType, name: &str, label: &str,
+            self, input_type: InputType, name: &str, label: &str,
             required: bool, value: Option<Value>,
             constraints: Vec<Constraint>, attributes: Vec<Attr>)
             -> Result<Self, FormError> {
@@ -579,48 +581,40 @@ impl HtmlForm {
             Some(value) => Some(vec![value]),
             None => None,
         };
-        let element = Element::Input(input_type);
-        for constraint in constraints.iter() {
-            if !constraint.allowed_on(&element) {
-                return Err(FormError::new("constraint not allowed"));
-            }
-        }
-        self.fields.push(Field::new(
-            name, Label::new(label), element,
-            required, None, values, constraints, attributes));
-        Ok(self)
+        self.element(
+            Element::Input(input_type), name, label, required, values,
+            vec![], constraints, attributes)
     }
 
     /// Shortcut to create a textarea without validation. Returns self, so
     /// calls can be chained.
     pub fn textarea(
-            mut self, name: &str, label: &str, required: bool,
+            self, name: &str, label: &str, required: bool,
             value: Option<Value>, attributes: Vec<Attr>)
-            -> Self {
+            -> Result<Self, FormError> {
         let values = match value {
             Some(value) => Some(vec![value]),
             None => None,
         };
-        self.fields.push(Field::new(
-            name, Label::new(label), Element::Textarea,
-            required, None, values, vec![], attributes));
-        self
+        self.element(
+            Element::Textarea, name, label, required, values,
+            vec![], vec![], attributes)
     }
 
     /// Shortcut to create a submit button. Returns self, so
     /// calls can be chained.
     pub fn submit(
-            mut self, name: Option<&str>, value: &str, attributes: Vec<Attr>)
-            -> Self {
+            self, name: Option<&str>, value: &str,
+            attributes: Vec<Attr>)
+            -> Result<Self, FormError> {
         let name = match name {
             Some(name) => name,
             None => "",
         };
-        let values = vec![Value::new(value)];
-        self.fields.push(Field::new(
-            name, Label::new(""), Element::Input(InputType::Submit),
-            false, None, Some(values), vec![], attributes));
-        self
+        let values = Some(vec![Value::new(value)]);
+        self.element(
+            Element::Input(InputType::Submit), name, "", false, values,
+            vec![], vec![], attributes)
     }
 
     /// Create an field of any type, this is similar to Field::new(),
@@ -628,18 +622,28 @@ impl HtmlForm {
     /// can be chained.
     pub fn element(
             mut self, element: Element, name: &str, label: &str,
-            required: bool, values: Vec<Value>, choices: &[(&str, &str)],
-            constraints: Vec<Constraint>,
+            required: bool, values: Option<Vec<Value>>,
+            choices: Vec<(&str, &str)>, constraints: Vec<Constraint>,
             attributes: Vec<Attr>)
-            -> Self {
-        let choices: Vec<(String, Label)> =
-            choices.iter().map(|(name, value)| {
-                (String::from(*name), Label::new(value))
-            }).collect();
+            -> Result<Self, FormError> {
+        let choices: Option<Vec<(String, Label)>> =
+            match choices.len() {
+                0 => None,
+                _ => Some(
+                    choices.iter()
+                        .map(|(name, value)|
+                            (String::from(*name), Label::new(value)))
+                        .collect()),
+            };
+        for constraint in constraints.iter() {
+            if !constraint.allowed_on(&element) {
+                return Err(FormError::new("constraint not allowed"));
+            }
+        }
         self.fields.push(Field::new(
-            name, Label::new(label), element, required, Some(choices),
-            Some(values), constraints, attributes));
-        self
+            name, Label::new(label), element, required, values, choices,
+            constraints, attributes));
+        Ok(self)
     }
 }
 
@@ -682,9 +686,8 @@ impl Field {
     /// arguments.
     pub fn new(
             name: &str, label: Label, element: Element, required: bool,
-            choices: Option<Vec<(String, Label)>>,
-            value: Option<Vec<Value>>, constraints: Vec<Constraint>,
-            attributes: Vec<Attr>)
+            value: Option<Vec<Value>>, choices: Option<Vec<(String, Label)>>,
+            constraints: Vec<Constraint>, attributes: Vec<Attr>)
             -> Field {
         Field {
             name: String::from(name),
@@ -904,6 +907,7 @@ impl Value {
 // Deref
 impl Deref for Value {
     type Target = String;
+
     fn deref(&self) -> &Self::Target {
         &self.value
     }
@@ -1052,7 +1056,7 @@ mod tests {
 
     #[test]
     fn test_parse_urldecode_plus() {
-        assert_eq!(urldecode(b"+").unwrap(), " ");
+        assert_eq!(urldecode(b"foo+bar").unwrap(), "foo bar");
     }
 
     #[test]
