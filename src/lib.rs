@@ -4,7 +4,7 @@
 //! use regex::Regex;
 //! use htmlform::{
 //!     HtmlForm, ValueMap, InputType, Constraint as Cons, Attr,
-//!     FormError, ValidationError, Label};
+//!     FormError, ValidationError};
 //!
 //! fn searchform() -> Result<HtmlForm<'static>, FormError> {
 //!     Ok(HtmlForm::new()
@@ -38,8 +38,8 @@
 //!                     }
 //!                 })),
 //!             ],
-//!             vec![Attr::Title(Label::new(
-//!                 "Must contain 1 number and 1 non-word character"))])?
+//!             vec![Attr::Title(
+//!                 "Must contain 1 number and 1 non-word character")])?
 //!         .input(
 //!             InputType::Number, "age", "Age", true, None,
 //!             vec![Cons::MinNumber(18.0)],
@@ -187,37 +187,6 @@ pub enum ContentType {
 }
 
 #[derive(Debug)]
-pub enum InputType {
-    Text,
-    Password,
-    Radio,
-    Checkbox,
-    Number,
-    Range,
-    Date,
-    DateTime,
-    Month,
-    Week,
-    Time,
-    Url,
-    Email,
-    Tel,
-    Color,
-    File,
-    Search,
-    Hidden,
-    Button,
-    Submit,
-    Reset,
-}
-
-#[derive(Debug)]
-pub enum Select {
-    Single,
-    Multi,
-}
-
-#[derive(Debug)]
 pub enum Element {
     Input(InputType),
     Textarea,
@@ -272,6 +241,37 @@ impl Element {
             _ => false,
         }
     }
+}
+
+#[derive(Debug)]
+pub enum InputType {
+    Text,
+    Password,
+    Radio,
+    Checkbox,
+    Number,
+    Range,
+    Date,
+    DateTime,
+    Month,
+    Week,
+    Time,
+    Url,
+    Email,
+    Tel,
+    Color,
+    File,
+    Search,
+    Hidden,
+    Button,
+    Submit,
+    Reset,
+}
+
+#[derive(Debug)]
+pub enum Select {
+    Single,
+    Multi,
 }
 
 /// Constraints on `Field` values, perform validation.
@@ -415,8 +415,8 @@ impl <'a> fmt::Debug for Constraint<'a> {
 pub enum Attr<'a> {
     Any(&'a str, &'a str),
     Step(f64),
-    Placeholder(Label<'a>),
-    Title(Label<'a>),
+    Placeholder(&'a str),
+    Title(&'a str),
 }
 
 impl <'a> Attr<'a> {
@@ -444,35 +444,10 @@ impl <'a> Attr<'a> {
     }
 }
 
-// XXX make translatable later
-#[derive(Debug)]
-pub struct Label<'a>(&'a str);
-
-impl <'a> Label<'a> {
-    pub fn new(label: &'a str) -> Label {
-        Label(label)
-    }
-}
-
-impl <'a> Deref for Label<'a> {
-    type Target = &'a str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl <'a> Serialize for Label<'a> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where S: Serializer {
-        serializer.serialize_str(&self.0)
-    }
-}
-
 #[derive(Debug)]
 pub struct HtmlForm<'a> {
     pub errors: HashMap<String, String>,
-    fields: Vec<Field<'a>>,
+    pub fields: Vec<Field<'a>>,
 }
 
 impl <'a> HtmlForm<'a> {
@@ -549,6 +524,15 @@ impl <'a> HtmlForm<'a> {
             }
         }
         self
+    }
+
+    pub fn field(&self, name: &str) -> Result<&Field<'a>, FormError> {
+        for field in &self.fields {
+            if field.name == name {
+                return Ok(&field);
+            }
+        }
+        Err(FormError::new("no such field"))
     }
 
     /// Return a list of values of a field. Returns an error when the
@@ -645,8 +629,7 @@ impl <'a> HtmlForm<'a> {
             vec![], vec![], attributes)
     }
 
-    /// Shortcut to create a submit button. Note that the label is rendered
-    /// as `value` in both HTML and JSON. Returns self, so calls can be
+    /// Shortcut to create a submit button. Returns self, so calls can be
     /// chained.
     pub fn submit(
             self, name: Option<&'a str>, label: &'a str,
@@ -661,6 +644,35 @@ impl <'a> HtmlForm<'a> {
             vec![], vec![], attributes)
     }
 
+    /// Shortcut to create a reset button. Returns self, so calls can be
+    /// chained.
+    pub fn reset(
+            self, label: &'a str, attributes: Vec<Attr<'a>>)
+            -> Result<Self, FormError> {
+        self.element(
+            Element::Input(InputType::Submit), "", label, false, None,
+            vec![], vec![], attributes)
+    }
+
+    /// Shortcut to create a select dropdown. Returns self, so calls can be
+    /// chained.
+    pub fn select(
+            self, name: &'a str, label: &'a str, multi: bool,
+            required: bool, value: Option<Vec<Value>>,
+            choices: Vec<(&'a str, &'a str)>,
+            attributes: Vec<Attr<'a>>)
+            -> Result<Self, FormError> {
+        let element = Element::Select(
+            match multi {
+                false => Select::Single,
+                true => Select::Multi,
+            });
+        self.element(
+            element, name, label, required, value, choices, vec![],
+            attributes)
+    }
+
+
     /// Create an field of any type, this is similar to Field::new(),
     /// but some checks and conversions are performed. Returns self, so
     /// calls can be chained.
@@ -671,15 +683,6 @@ impl <'a> HtmlForm<'a> {
             constraints: Vec<Constraint<'a>>,
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
-        let choices: Option<Vec<(&'a str, Label<'a>)>> =
-            match choices.len() {
-                0 => None,
-                _ => Some(
-                    choices.iter()
-                        .map(|(name, value)|
-                            (*name, Label::new(*value)))
-                        .collect()),
-            };
         for constraint in constraints.iter() {
             if !constraint.allowed_on(&element) {
                 return Err(FormError::new("constraint not allowed"));
@@ -691,7 +694,7 @@ impl <'a> HtmlForm<'a> {
             }
         }
         self.fields.push(Field::new(
-            name, Label::new(label), element, required, values, choices,
+            name, label, element, required, values, choices,
             constraints, attributes));
         Ok(self)
     }
@@ -709,19 +712,19 @@ impl <'a> Serialize for HtmlForm<'a> {
 
 /// Represents a form field/element.
 ///
-/// A `Field` can convert itself to HTML and to JSON (and other formats,
-/// using serde) and can perform validation of its `Value`s based on
+/// A `Field` can convert itself to JSON (and other formats, using
+/// `serde`) and can perform validation of its `Value`s based on
 /// its `Constraint`s. Note that the `value` field always contains a `Vec`
 /// of `Value`s, close to how HTML url encoding works (where every key can
 /// appear more than once and every value is a string, or optional).
 #[derive(Debug)]
 pub struct Field<'a> {
     name: &'a str,
-    label: Label<'a>,
+    label: &'a str,
     element: Element,
     required: bool,
     multi: bool,
-    choices: Vec<(&'a str, Label<'a>)>,
+    choices: Vec<(&'a str, &'a str)>,
     value: Option<Vec<Value>>,
     attributes: Mutex<Vec<Attr<'a>>>,
     constraints: Vec<Constraint<'a>>,
@@ -734,9 +737,9 @@ impl <'a> Field<'a> {
     /// instantiate, since those perform additional checks and prepare
     /// arguments.
     pub fn new(
-            name: &'a str, label: Label<'a>, element: Element,
+            name: &'a str, label: &'a str, element: Element,
             required: bool, value: Option<Vec<Value>>,
-            choices: Option<Vec<(&'a str, Label<'a>)>>,
+            choices: Vec<(&'a str, &'a str)>,
             constraints: Vec<Constraint<'a>>, attributes: Vec<Attr<'a>>)
             -> Field<'a> {
         let multi = element.multi();
@@ -746,10 +749,7 @@ impl <'a> Field<'a> {
             element: element,
             required: required,
             multi: multi,
-            choices: match choices {
-                Some(choices) => choices,
-                None => Vec::new(),
-            },
+            choices: choices,
             constraints: constraints,
             attributes: Mutex::new(attributes),
             value: value,
