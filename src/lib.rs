@@ -1,18 +1,20 @@
 //! Library to validate and generate HTML form data.
 //!
 //! ```rust
-//! use regex::Regex;
 //! use htmlform::{
 //!     HtmlForm, ValueMap, InputType, Constraint as Cons, Attr,
 //!     FormError, ValidationError};
 //!
+//! // simple form with 1 field
 //! fn searchform() -> Result<HtmlForm<'static>, FormError> {
 //!     Ok(HtmlForm::new()
 //!         .input(
 //!             InputType::Text, "q", "Search", true, None, vec![], vec![])?
-//!         .submit(None, "Search", vec![])?)
+//!         .submit(None, "go!", vec![])?)
 //! }
 //!
+//! // more elaborate example, with validation (both client- and
+//! // server-side) and custom attributes
 //! fn userform() -> Result<HtmlForm<'static>, FormError> {
 //!     Ok(HtmlForm::new()
 //!         .input(
@@ -29,14 +31,6 @@
 //!             vec![
 //!                 Cons::MinLength(6), Cons::MaxLength(64),
 //!                 Cons::Pattern(r"(\d.*[^\w\s\d]|[^\w\s\d].*\d)"),
-//!                 Cons::Func(Box::new(|value| {
-//!                     match value.as_string().as_str() {
-//!                         "foobar-123" =>
-//!                             Err(ValidationError::new(
-//!                                 "password too simple!")),
-//!                         _ => Ok(()),
-//!                     }
-//!                 })),
 //!             ],
 //!             vec![Attr::Title(
 //!                 "Must contain 1 number and 1 non-word character")])?
@@ -44,39 +38,66 @@
 //!             InputType::Number, "age", "Age", true, None,
 //!             vec![Cons::MinNumber(18.0)],
 //!             vec![Attr::Step(1.0), Attr::Any("id", "age")])?
+//!         .hidden(
+//!             "csrf", Some("foo"), true,
+//!             vec![Cons::Func(Box::new(|v| {
+//!                 if v.as_string().as_str() != "foo" {
+//!                     Err(ValidationError::new("invalid CSRF token"))
+//!                 } else {
+//!                     Ok(())
+//!                 }
+//!             }))],
+//!             vec![])?
 //!         .textarea("message", "Message", false, None, vec![])?
 //!         .submit(None, "Submit", vec![])?
 //!     )
 //! }
 //!
 //! fn main() {
-//!     // simple form with 1 field
 //!     let values = ValueMap::from_urlencoded(b"q=foo").unwrap();
 //!     let form = searchform().unwrap().validate_and_set(values);
 //!
+//!     println!("{}", serde_json::to_string_pretty(&form).unwrap());
 //!     assert_eq!(form.errors.len(), 0);
 //!     assert_eq!(form.getone::<String>("q").unwrap(), "foo");
 //!     assert_eq!(
-//!         serde_json::to_string(&form).unwrap(),
-//!         concat!(
-//!             r#"{"errors":{},"fields":["#,
-//!             r#"{"name":"q","label":"Search","fieldtype":"input","#,
-//!             r#""subtype":"text","required":true,"multi":false,"#,
-//!             r#""choices":[],"attributes":{},"value":"foo"},"#,
-//!             r#"{"name":"","label":"Search","fieldtype":"input","#,
-//!             r#""subtype":"submit","required":false,"multi":false,"#,
-//!             r#""choices":[],"attributes":{},"value":""}]}"#));
+//!         serde_json::to_string_pretty(&form).unwrap(),
+//!         r#"{
+//!   "errors": {},
+//!   "fields": [
+//!     {
+//!       "name": "q",
+//!       "label": "Search",
+//!       "fieldtype": "input",
+//!       "subtype": "text",
+//!       "required": true,
+//!       "multi": false,
+//!       "choices": [],
+//!       "attributes": {},
+//!       "value": "foo"
+//!     },
+//!     {
+//!       "name": "",
+//!       "label": "go!",
+//!       "fieldtype": "input",
+//!       "subtype": "submit",
+//!       "required": false,
+//!       "multi": false,
+//!       "choices": [],
+//!       "attributes": {},
+//!       "value": ""
+//!     }
+//!   ]
+//! }"#);
 //!
-//!     // more elaborate example, with validation (both client- and
-//!     // server-side) and custom attributes
 //!     let values = ValueMap::from_urlencoded(
-//!         b"username=johnny&name=Johnny&password=foobar-123&age=46"
+//!         b"username=johnny&name=Johnny&password=foobar-123&age=46&csrf=bar"
 //!     ).unwrap();
 //!     let form = userform().unwrap().validate_and_set(values);
 //!
 //!     assert_eq!(form.errors.len(), 1);
 //!     assert_eq!(
-//!         form.errors.get("password").unwrap(), "password too simple!");
+//!         form.errors.get("csrf").unwrap(), "invalid CSRF token");
 //!     assert_eq!(form.getone::<String>("username").unwrap(), "johnny");
 //!     assert_eq!(form.getone::<String>("password").unwrap(), "foobar-123");
 //! }
@@ -87,7 +108,6 @@ use std::str::FromStr;
 use std::error::Error;
 use std::ops::Deref;
 use std::collections::HashMap;
-use std::sync::Mutex;
 
 use serde::ser::{Serialize, Serializer, SerializeStruct};
 use regex::Regex;
@@ -142,6 +162,7 @@ impl <'a> From<std::num::ParseIntError> for UrlDecodingError<'a> {
     }
 }
 
+/// Decode url-encoded bytes to a UTF-8 `String`.
 pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError<'static>> {
     let plus: u8 = 43;
     let percent: u8 = 37;
@@ -178,14 +199,7 @@ pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError<'static>> {
     Ok(std::str::from_utf8(&out)?.to_string())
 }
 
-#[derive(Debug)]
-pub enum ContentType {
-    Urlencoded,
-    // XXX not yet...
-    // Multipart,
-    Json,
-}
-
+/// Form element types, each of which results in a different HTML element.
 #[derive(Debug)]
 pub enum Element {
     Input(InputType),
@@ -243,6 +257,8 @@ impl Element {
     }
 }
 
+/// Different input types, use with `Element::Input()`. Used as value of
+/// the `type` attribute on an HTML `input` element.
 #[derive(Debug)]
 pub enum InputType {
     Text,
@@ -268,6 +284,7 @@ pub enum InputType {
     Reset,
 }
 
+/// Pass this to `Element::Select()` to determine selection behaviour.
 #[derive(Debug)]
 pub enum Select {
     Single,
@@ -411,6 +428,7 @@ impl <'a> fmt::Debug for Constraint<'a> {
     }
 }
 
+/// An HTML attribute without validation behaviour.
 #[derive(Debug)]
 pub enum Attr<'a> {
     Any(&'a str, &'a str),
@@ -444,6 +462,27 @@ impl <'a> Attr<'a> {
     }
 }
 
+/// `HtmlForm` represents an HTML form. It is used to validate data (both on
+/// the server and the client side) and to serialize forms in a consistent
+/// manner (either as JSON or using a template language of choice). The
+/// builder-style API makes it relatively easy to define forms:
+///
+/// ```rust
+/// use htmlform::{HtmlForm, ValueMap, InputType, Constraint, Attr};
+///
+/// fn main() {
+///     // user input
+///     let values = ValueMap::from_urlencoded(b"foo=bar").unwrap();
+///     let form = HtmlForm::new()
+///         .input(
+///             InputType::Text, "foo", "Foo", true, None,
+///             vec![], vec![]).unwrap()
+///         .submit(None, "Submit", vec![]).unwrap()
+///         .validate_and_set(values);
+///     assert_eq!(form.errors.len(), 0);
+///     assert_eq!(form.getone::<String>("foo").unwrap(), "bar");
+/// }
+/// ```
 #[derive(Debug)]
 pub struct HtmlForm<'a> {
     pub errors: HashMap<String, String>,
@@ -453,14 +492,6 @@ pub struct HtmlForm<'a> {
 impl <'a> HtmlForm<'a> {
     /// Instantiate an HtmlForm.
     pub fn new() -> HtmlForm<'a> {
-        HtmlForm {
-            errors: HashMap::new(),
-            fields: Vec::new(),
-        }
-    }
-
-    pub fn from_request(_content_type: &ContentType, _payload: String)
-            -> HtmlForm {
         HtmlForm {
             errors: HashMap::new(),
             fields: Vec::new(),
@@ -526,6 +557,8 @@ impl <'a> HtmlForm<'a> {
         self
     }
 
+    /// Return a `Field` by name, or an error if there is not field by that
+    /// name.
     pub fn field(&self, name: &str) -> Result<&Field<'a>, FormError> {
         for field in &self.fields {
             if field.name == name {
@@ -585,24 +618,13 @@ impl <'a> HtmlForm<'a> {
         Err(FormError::new("field not found"))
     }
 
-    /// Set an attribute on a field.
-    pub fn attr(&mut self, name: &str, attribute: Attr<'a>) ->
-            Result<(), FormError> {
-        for field in &self.fields {
-            if field.name == name {
-                field.attributes.lock().unwrap().push(attribute);
-                return Ok(());
-            }
-        }
-        Err(FormError::new("field not found"))
-    }
-
-    /// Shortcut to create an input element, use this for non-collection
-    /// fields (so not for `InputType::Radio` or `InputType::Checkbox`).
-    /// Returns self, so calls can be chained.
+    /// Shortcut to create an `input` element, use this for non-collection
+    /// fields (so not for `InputType::Radio` or `InputType::Checkbox`,
+    /// for those see `choice_input()`). Returns self, so calls can
+    /// be chained.
     pub fn input(
             self, input_type: InputType, name: &'a str, label: &'a str,
-            required: bool, value: Option<Value>,
+            required: bool, value: Option<&str>,
             constraints: Vec<Constraint<'a>>, attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
         let values = match value {
@@ -611,14 +633,88 @@ impl <'a> HtmlForm<'a> {
         };
         self.element(
             Element::Input(input_type), name, label, required, values,
-            vec![], constraints, attributes)
+            &[], constraints, attributes)
     }
 
-    /// Shortcut to create a textarea without validation. Returns self, so
-    /// calls can be chained.
+    /// Shortcut to create a set of `checkbox`es. Returns self, so calls
+    /// can be chained.
+    pub fn checkbox(
+            self, name: &'a str, label: &'a str,
+            required: bool, values: Option<Vec<&str>>,
+            choices: &'a[(&'a str, &'a str)],
+            attributes: Vec<Attr<'a>>)
+            -> Result<Self, FormError> {
+        self.element(
+            Element::Input(InputType::Checkbox), name, label, required,
+            values, choices, vec![], attributes)
+    }
+
+    /// Shortcut to create a set of `radio` buttons. Returns self, so calls
+    /// can be chained.
+    pub fn radio(
+            self, name: &'a str, label: &'a str,
+            required: bool, value: Option<&str>,
+            choices: &'a[(&'a str, &'a str)],
+            attributes: Vec<Attr<'a>>)
+            -> Result<Self, FormError> {
+        let values = match value {
+            Some(value) => Some(vec![value]),
+            None => None,
+        };
+        self.element(
+            Element::Input(InputType::Checkbox), name, label, required,
+            values, choices, vec![], attributes)
+    }
+
+    /// Shortcut to create a text(-style) `input` with `datalist`.
+    /// Returns self, so calls can be chained.
+    pub fn datalist_input(
+            self, input_type: InputType, name: &'a str, label: &'a str,
+            required: bool, value: Option<&str>,
+            datalist: &'a[(&'a str, &'a str)],
+            attributes: Vec<Attr<'a>>)
+            -> Result<Self, FormError> {
+        match input_type {
+            InputType::Password |
+            InputType::Radio |
+            InputType::Checkbox |
+            InputType::File |
+            InputType::Hidden |
+            InputType::Button |
+            InputType::Submit |
+            InputType::Reset => {
+                return Err(FormError::new("invalid input type"));
+            },
+            _ => (),
+        }
+        let values = match value {
+            Some(value) => Some(vec![value]),
+            None => None,
+        };
+        self.element(
+            Element::Input(input_type), name, label, required, values,
+            datalist, vec![], attributes)
+    }
+
+    pub fn hidden(
+            self, name: &'a str, value: Option<&str>,
+            required: bool, constraints: Vec<Constraint<'a>>,
+            attributes: Vec<Attr<'a>>)
+            -> Result<Self, FormError> {
+        let values = match value {
+            Some(value) => Some(vec![value]),
+            None => None,
+        };
+        self.element(
+            Element::Input(InputType::Hidden), name, "", required, values,
+            &[], constraints, attributes)
+    }
+
+    /// Shortcut to create a `textarea` without validation. Returns self,
+    /// so calls can be chained.
     pub fn textarea(
             self, name: &'a str, label: &'a str, required: bool,
-            value: Option<Value>, attributes: Vec<Attr<'a>>)
+            value: Option<&str>, attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
         let values = match value {
             Some(value) => Some(vec![value]),
@@ -626,10 +722,28 @@ impl <'a> HtmlForm<'a> {
         };
         self.element(
             Element::Textarea, name, label, required, values,
-            vec![], vec![], attributes)
+            &[], vec![], attributes)
     }
 
-    /// Shortcut to create a submit button. Returns self, so calls can be
+    /// Shortcut to create a `select` dropdown. Returns self, so calls can
+    /// be chained.
+    pub fn select(
+            self, name: &'a str, label: &'a str, multi: bool,
+            required: bool, values: Option<Vec<&str>>,
+            choices: &'a[(&'a str, &'a str)],
+            attributes: Vec<Attr<'a>>)
+            -> Result<Self, FormError> {
+        let element = Element::Select(
+            match multi {
+                false => Select::Single,
+                true => Select::Multi,
+            });
+        self.element(
+            element, name, label, required, values, choices, vec![],
+            attributes)
+    }
+
+    /// Shortcut to create a `submit` button. Returns self, so calls can be
     /// chained.
     pub fn submit(
             self, name: Option<&'a str>, label: &'a str,
@@ -641,48 +755,54 @@ impl <'a> HtmlForm<'a> {
         };
         self.element(
             Element::Input(InputType::Submit), name, label, false, None,
-            vec![], vec![], attributes)
+            &[], vec![], attributes)
     }
 
-    /// Shortcut to create a reset button. Returns self, so calls can be
+    /// Shortcut to create a `reset` button. Returns self, so calls can be
     /// chained.
     pub fn reset(
             self, label: &'a str, attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
         self.element(
             Element::Input(InputType::Submit), "", label, false, None,
-            vec![], vec![], attributes)
+            &[], vec![], attributes)
     }
 
-    /// Shortcut to create a select dropdown. Returns self, so calls can be
+    /// Shortcut to create a `button` element. Returns self, so calls can be
     /// chained.
-    pub fn select(
-            self, name: &'a str, label: &'a str, multi: bool,
-            required: bool, value: Option<Vec<Value>>,
-            choices: Vec<(&'a str, &'a str)>,
+    pub fn button(
+            self, name: &'a str, label: &'a str,
+            value: Option<&str>,
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
-        let element = Element::Select(
-            match multi {
-                false => Select::Single,
-                true => Select::Multi,
-            });
+        let values = match value {
+            Some(value) => Some(vec![value]),
+            None => None,
+        };
         self.element(
-            element, name, label, required, value, choices, vec![],
-            attributes)
+            Element::Button, name, label, false, values,
+            &[], vec![], attributes)
     }
 
-
-    /// Create an field of any type, this is similar to Field::new(),
+    /// Create an field of any type. This is similar to Field::new(),
     /// but some checks and conversions are performed. Returns self, so
     /// calls can be chained.
     pub fn element(
             mut self, element: Element, name: &'a str, label: &'a str,
-            required: bool, values: Option<Vec<Value>>,
-            choices: Vec<(&'a str, &'a str)>,
+            required: bool, values: Option<Vec<&str>>,
+            choices: &'a[(&'a str, &'a str)],
             constraints: Vec<Constraint<'a>>,
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
+        let values = match values {
+            Some(values) => {
+                Some(
+                    values.iter()
+                        .map(|v| Value(String::from(*v)))
+                        .collect())
+            },
+            None => None,
+        };
         for constraint in constraints.iter() {
             if !constraint.allowed_on(&element) {
                 return Err(FormError::new("constraint not allowed"));
@@ -724,9 +844,9 @@ pub struct Field<'a> {
     element: Element,
     required: bool,
     multi: bool,
-    choices: Vec<(&'a str, &'a str)>,
+    choices: &'a[(&'a str, &'a str)],
     value: Option<Vec<Value>>,
-    attributes: Mutex<Vec<Attr<'a>>>,
+    attributes: Vec<Attr<'a>>,
     constraints: Vec<Constraint<'a>>,
 }
 
@@ -739,7 +859,7 @@ impl <'a> Field<'a> {
     pub fn new(
             name: &'a str, label: &'a str, element: Element,
             required: bool, value: Option<Vec<Value>>,
-            choices: Vec<(&'a str, &'a str)>,
+            choices: &'a[(&'a str, &'a str)],
             constraints: Vec<Constraint<'a>>, attributes: Vec<Attr<'a>>)
             -> Field<'a> {
         let multi = element.multi();
@@ -751,7 +871,7 @@ impl <'a> Field<'a> {
             multi: multi,
             choices: choices,
             constraints: constraints,
-            attributes: Mutex::new(attributes),
+            attributes: attributes,
             value: value,
         }
     }
@@ -762,8 +882,8 @@ impl <'a> Field<'a> {
             None => Vec::new(),
             Some(value) =>
                 value.iter()
-                    .filter(|value| value.value != "")
-                    .map(|value| Value {value: value.value.clone()})
+                    .filter(|value| value.0 != "")
+                    .map(|value| Value(value.0.clone()))
                     .collect(),
         }
     }
@@ -794,7 +914,7 @@ impl <'a> Field<'a> {
     pub(crate) fn set_values(&mut self, values: Vec<&Value>) {
         let mut clone = Vec::new();
         for value in values {
-            clone.push(Value {value: value.value.clone()});
+            clone.push(Value(value.0.clone()));
         }
         self.value = Some(clone);
     }
@@ -822,7 +942,7 @@ impl <'a> Serialize for Field<'a> {
                 None => (),
             }
         }
-        for attribute in self.attributes.lock().unwrap().iter() {
+        for attribute in self.attributes.iter() {
             let (name, value) = attribute.attrpair();
             attributesmap.insert(name, value);
         }
@@ -856,6 +976,10 @@ impl <'a> Serialize for Field<'a> {
     }
 }
 
+/// A set of form values. Note that values are always stored as lists of
+/// strings, similar to how urlencoded form data is treated (no type
+/// information, any field may appear more than once and there doesn't need
+/// to be a value).
 #[derive(Debug, PartialEq)]
 pub struct ValueMap {
     values: HashMap<String, Vec<Value>>,
@@ -876,7 +1000,7 @@ impl ValueMap {
         values
             .iter()
             .filter(|v| {
-                v.value != ""
+                v.0 != ""
             })
             .collect()
     }
@@ -942,25 +1066,23 @@ impl Deref for ValueMap {
     }
 }
 
+/// A single form value, stored as `String`. May be empty in some cases,
+/// which results in the value being ignored in validation.
 #[derive(Debug, PartialEq)]
-pub struct Value {
-    value: String,
-}
+pub struct Value(String);
 
 impl Value {
     pub fn new(value: &str) -> Value {
-        Value {
-            value: value.to_string(),
-        }
+        Value(value.to_string())
     }
 
     pub fn as_string(&self) -> String {
-        self.value.clone()
+        self.0.clone()
     }
 
     pub fn parse<T>(&self) -> Result<T, ValidationError>
             where T: FromStr {
-        match self.value.parse() {
+        match self.0.parse() {
             Ok(value) => Ok(value),
             Err(_) => Err(ValidationError::new("invalid value")),
         }
@@ -972,18 +1094,18 @@ impl Deref for Value {
     type Target = String;
 
     fn deref(&self) -> &Self::Target {
-        &self.value
+        &self.0
     }
 }
 
 impl Serialize for Value {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where S: Serializer {
-        serializer.serialize_str(&self.value)
+        serializer.serialize_str(&self.0)
     }
 }
 
-/// Returned on form definition errors
+/// Returned on form definition errors.
 #[derive(Debug)]
 pub struct FormError {
     message: String,
@@ -1015,7 +1137,7 @@ impl From<ValidationError> for FormError {
     }
 }
 
-/// Returned on form validation errors
+/// Returned on form validation errors.
 #[derive(Debug)]
 pub struct ValidationError {
     message: String,
