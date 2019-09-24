@@ -31,7 +31,22 @@ and client-side.
 
 ## Features
 
-* Parse 
+* Follows a builder-style pattern to safely build correct form structures.
+
+* Provides a complete (XXX not yet!) set of enums for all HTML elements and
+  attributes, with HTML validity checks on building the form.
+
+* Provides client- and server-side validation based on HTML constraint
+  attributes (e.g. `max`/`min`, `maxlength`/`minlength`, `pattern`).
+
+* Allows per-field custom server-side validation.
+
+* Parses `application/x-www-form-urlencoded` to a data container (`ValueMap`)
+  to use as values for the form - support for `multipart/form-data` is
+  planned.
+
+* Serializes to JSON (and other formats) by implementing
+  [Serde](https://docs.rs/serde/)'s `Serialize` trait.
 
 *HTML generation functionality is not directly provided*, as users will always
 want to render their HTML in a specific manner. Instead, the HtmlForm
