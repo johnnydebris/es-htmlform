@@ -79,7 +79,8 @@ pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError<'static>> {
             // is encoded as multiple u8s in a row, each with a separate %,
             // so if we handle the chars 1 at a time, we should end up with
             // a valid utf-8 sequence, assuming the character encoding is
-            // utf-8 (XXX and what if it isn't?))
+            // utf-8 (XXX and what if it isn't? or is it always?))
+            // XXX this is rather ugly... :|
             charcode = hex::decode(
                 &format!(
                     "{}{}", input[i] as char, input[i + 1] as char))?[0];
