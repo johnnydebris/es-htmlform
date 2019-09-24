@@ -2,12 +2,12 @@
 //!
 //! ```rust
 //! use htmlform::{
-//!     HtmlForm, ValueMap, InputType, Constraint as Cons, Attr,
+//!     HtmlForm, ValueMap, InputType, Method, Constraint as Cons, Attr,
 //!     FormError, ValidationError};
 //!
 //! // simple form with 1 field
 //! fn searchform() -> Result<HtmlForm<'static>, FormError> {
-//!     Ok(HtmlForm::new()
+//!     Ok(HtmlForm::new(".", Method::Get)
 //!         .input(
 //!             InputType::Text, "q", "Search", true, None, vec![], vec![])?
 //!         .submit(None, "go!", vec![])?)
@@ -16,7 +16,7 @@
 //! // more elaborate example, with validation (both client- and
 //! // server-side) and custom attributes
 //! fn userform() -> Result<HtmlForm<'static>, FormError> {
-//!     Ok(HtmlForm::new()
+//!     Ok(HtmlForm::new(".", Method::Post)
 //!         .input(
 //!             InputType::Text, "username", "Username", true, None,
 //!             vec![
@@ -63,6 +63,8 @@
 //!     assert_eq!(
 //!         serde_json::to_string_pretty(&form).unwrap(),
 //!         r#"{
+//!   "action": ".",
+//!   "method": "get",
 //!   "errors": {},
 //!   "fields": [
 //!     {
@@ -100,6 +102,7 @@
 //!         form.errors.get("csrf").unwrap(), "invalid CSRF token");
 //!     assert_eq!(form.getone::<String>("username").unwrap(), "johnny");
 //!     assert_eq!(form.getone::<String>("password").unwrap(), "foobar-123");
+//!     assert_eq!(form.getone::<String>("csrf").unwrap(), "bar");
 //! }
 //! ```
 
@@ -199,6 +202,25 @@ pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError<'static>> {
     Ok(std::str::from_utf8(&out)?.to_string())
 }
 
+/// Methods, correspond to `method` attribute values (note that these
+/// do not correspond to HTTP methods, see specs).
+#[derive(Debug)]
+pub enum Method {
+    Get,
+    Post,
+    Dialog,
+}
+
+impl Method {
+    fn attrvalue(&self) -> String {
+        match &self {
+            Method::Get => "get",
+            Method::Post => "post",
+            Method::Dialog => "dialog",
+        }.to_string()
+    }
+}
+
 /// Form element types, each of which results in a different HTML element.
 #[derive(Debug)]
 pub enum Element {
@@ -249,8 +271,7 @@ impl Element {
 
     pub fn multi(&self) -> bool {
         match self {
-            Element::Input(InputType::Checkbox) =>
-                true,
+            Element::Input(InputType::Checkbox) |
             Element::Select(Select::Multi) => true,
             _ => false,
         }
@@ -375,8 +396,11 @@ impl <'a> Constraint<'a> {
 
     fn allowed_on(&self, element: &Element) -> bool {
         match self {
-            Constraint::MinLength(_) => true,
-            Constraint::MaxLength(_) => true,
+            Constraint::MinLength(_) |
+            Constraint::MaxLength(_) => match element {
+                Element::Input(_) => true,
+                _ => false,
+            },
             Constraint::MinNumber(_) => match element {
                 Element::Input(InputType::Number) => true,
                 _ => false,
@@ -451,13 +475,13 @@ impl <'a> Attr<'a> {
 
     fn allowed_on(&self, element: &Element) -> bool {
         match self {
-            Attr::Any(_, _) => true,
+            Attr::Any(_, _) |
+            Attr::Placeholder(_) |
+            Attr::Title(_) => true,
             Attr::Step(_) => match element {
                 Element::Input(InputType::Number) => true,
                 _ => false,
             },
-            Attr::Placeholder(_) => true,
-            Attr::Title(_) => true,
         }
     }
 }
@@ -468,12 +492,12 @@ impl <'a> Attr<'a> {
 /// builder-style API makes it relatively easy to define forms:
 ///
 /// ```rust
-/// use htmlform::{HtmlForm, ValueMap, InputType, Constraint, Attr};
+/// use htmlform::{HtmlForm, ValueMap, Method, InputType, Constraint, Attr};
 ///
 /// fn main() {
 ///     // user input
 ///     let values = ValueMap::from_urlencoded(b"foo=bar").unwrap();
-///     let form = HtmlForm::new()
+///     let form = HtmlForm::new(".", Method::Post)
 ///         .input(
 ///             InputType::Text, "foo", "Foo", true, None,
 ///             vec![], vec![]).unwrap()
@@ -485,14 +509,18 @@ impl <'a> Attr<'a> {
 /// ```
 #[derive(Debug)]
 pub struct HtmlForm<'a> {
+    pub action: &'a str,
+    pub method: Method,
     pub errors: HashMap<String, String>,
     pub fields: Vec<Field<'a>>,
 }
 
 impl <'a> HtmlForm<'a> {
     /// Instantiate an HtmlForm.
-    pub fn new() -> HtmlForm<'a> {
+    pub fn new(action: &'a str, method: Method) -> HtmlForm<'a> {
         HtmlForm {
+            action: action,
+            method: method,
             errors: HashMap::new(),
             fields: Vec::new(),
         }
@@ -508,10 +536,10 @@ impl <'a> HtmlForm<'a> {
     /// Example:
     ///
     /// ```rust
-    /// use htmlform::{HtmlForm, ValueMap, InputType, Constraint};
+    /// use htmlform::{HtmlForm, ValueMap, Method, InputType, Constraint};
     ///
     /// fn main() {
-    ///     let form = HtmlForm::new()
+    ///     let form = HtmlForm::new(".", Method::Post)
     ///         .input(
     ///             InputType::Text, "foo", "Foo", true, None,
     ///             vec![Constraint::MinLength(5)], vec![]).unwrap()
@@ -532,25 +560,19 @@ impl <'a> HtmlForm<'a> {
                         field.name.to_string(),
                         String::from("field can only have one value"));
                 } else {
-                    match field.validate(&non_empty) {
-                        Err(e) => {
-                            self.errors.insert(
-                                field.name.to_string(), format!("{}", e));
-                        },
-                        Ok(()) => (),
+                    if let Err(e) = field.validate(&non_empty) {
+                        self.errors.insert(
+                            field.name.to_string(), format!("{}", e));
                     }
                     field.set_values(non_empty);
                 }
             } else {
                 // set default (empty) value
                 field.set_default_value();
-                match field.required {
-                    true => {
-                        self.errors.insert(
-                            field.name.to_string(),
-                            String::from("no value for required field"));
-                    },
-                    false => (),
+                if field.required {
+                    self.errors.insert(
+                        field.name.to_string(),
+                        String::from("no value for required field"));
                 }
             }
         }
@@ -666,8 +688,8 @@ impl <'a> HtmlForm<'a> {
             values, choices, vec![], attributes)
     }
 
-    /// Shortcut to create a text(-style) `input` with `datalist`.
-    /// Returns self, so calls can be chained.
+    /// Shortcut to create a text(-style) `input` with `datalist`
+    /// for auto-fill suggestions. Returns self, so calls can be chained.
     pub fn datalist_input(
             self, input_type: InputType, name: &'a str, label: &'a str,
             required: bool, value: Option<&str>,
@@ -823,7 +845,9 @@ impl <'a> HtmlForm<'a> {
 impl <'a> Serialize for HtmlForm<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
             where S: Serializer {
-        let mut s = serializer.serialize_struct("Field", 2)?;
+        let mut s = serializer.serialize_struct("Field", 4)?;
+        s.serialize_field("action", &self.action)?;
+        s.serialize_field("method", &self.method.attrvalue())?;
         s.serialize_field("errors", &self.errors)?;
         s.serialize_field("fields", &self.fields)?;
         s.end()
@@ -899,6 +923,34 @@ impl <'a> Field<'a> {
     /// `HtmlForm`'s `validate_and_set()`.
     pub fn validate(&self, values: &Vec<&Value>)
             -> Result<(), ValidationError> {
+        // validate choices, but only for certain elements (on other
+        // elements, choices are (optional) suggestions, usually to
+        // populate the `datalist` element for auto-fill).
+        match self.element {
+            Element::Input(InputType::Checkbox) |
+            Element::Select(Select::Multi) => {
+                let choicevalues: Vec<&str> = self.choices.iter()
+                    .map(|(value, _)| {
+                        *value
+                    })
+                    .collect();
+                for value in values {
+                    let value_str = &value.0.as_str();
+                    if !choicevalues.contains(value_str) {
+                        return Err(ValidationError::new("invalid choice"));
+                    }
+                    let split: Vec<&[&Value]> = values
+                        .split(|v| v == value)
+                        .collect();
+                    if split.len() > 2 {
+                        return Err(
+                            ValidationError::new(
+                                "value provided more than once"));
+                    }
+                }
+            },
+            _ => (),
+        }
         for constraint in self.constraints.iter() {
             for value in values.iter() {
                 constraint.validate(&value)?;
@@ -935,11 +987,8 @@ impl <'a> Serialize for Field<'a> {
         // attributes combines self.constraints and self.attributes
         let mut attributesmap = HashMap::new();
         for constraint in &self.constraints {
-            match constraint.attrpair() {
-                Some((name, value)) => {
-                    attributesmap.insert(name, value);
-                },
-                None => (),
+            if let Some((name, value)) = constraint.attrpair() {
+                attributesmap.insert(name, value);
             }
         }
         for attribute in self.attributes.iter() {
@@ -957,19 +1006,21 @@ impl <'a> Serialize for Field<'a> {
             false => {
                 match &self.value {
                     Some(value) => {
-                        match value.len() {
-                            1 => {
-                                s.serialize_field("value", &value[0])?;
-                            },
-                            _ => {
-                                s.serialize_field("value", &"")?;
-                            },
+                        let strvalue = if value.len() == 1 {
+                            match self.element {
+                                Element::Input(InputType::Password) =>
+                                    String::new(),
+                                _ => value[0].0.clone(),
+                            }
+                        } else {
+                            String::new()
                         };
+                        s.serialize_field("value", &strvalue)?;
                     },
                     None => {
                         s.serialize_field("value", &self.value)?;
                     },
-                };
+                }
             },
         }
         s.end()
@@ -1166,11 +1217,11 @@ impl Error for ValidationError {
 #[cfg(test)]
 mod tests {
     use crate::{
-        HtmlForm, Value, ValueMap, UrlDecodingError, InputType, Attr,
+        HtmlForm, Value, ValueMap, UrlDecodingError, Method, InputType, Attr,
         Constraint, urldecode};
 
     fn testform() -> HtmlForm<'static> {
-        HtmlForm::new()
+        HtmlForm::new(".", Method::Post)
             .input(
                 InputType::Text, "foo", "Foo", true, None,
                 vec![Constraint::MinLength(0), Constraint::MaxLength(10)],
@@ -1277,7 +1328,7 @@ mod tests {
     #[test]
     fn test_form_validation_func() {
         let values = ValueMap::from_urlencoded(b"foo=1").unwrap();
-        let form = HtmlForm::new()
+        let form = HtmlForm::new(".", Method::Post)
             .input(
                 InputType::Text, "foo", "Foo", true, None,
                 vec![Constraint::Func(Box::new(|_| Ok(())))], vec![],
@@ -1288,7 +1339,7 @@ mod tests {
 
     #[test]
     fn test_constraint_not_allowed() {
-        let result = HtmlForm::new()
+        let result = HtmlForm::new(".", Method::Post)
             .input(
                 InputType::Color, "foo", "Foo", true, None,
                 vec![Constraint::MaxNumber(5.0)], vec![]);
