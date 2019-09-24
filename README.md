@@ -49,7 +49,7 @@ and the client.
   [Serde](https://docs.rs/serde/)'s `Serialize` trait.
 
 *HTML generation functionality is not directly provided*, as users will always
-want to render their HTML in a specific manner. Instead, the HtmlForm
+want to render their HTML in a specific manner. Instead, `HtmlForm`
 implements [Serde](https://docs.rs/serde/)'s `Serialize`
 trait so it can easily be converted to JSON for client-side rendering or to
 use as datastructure for templating languages like
