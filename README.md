@@ -34,8 +34,8 @@ and the client.
 
 * Follows a builder-style pattern to safely build correct form structures.
 
-* Provides a complete (XXX not yet!) set of enums for all HTML elements and
-  attributes, with HTML validity checks on building the form.
+* Provides a complete set of enums for all HTML elements and attributes,
+  with HTML validity checks and value validation on building the form.
 
 * Provides client- and server-side validation based on HTML constraint
   attributes (e.g. `max`/`min`, `maxlength`/`minlength`, `pattern`).
@@ -43,26 +43,25 @@ and the client.
 * Allows per-field custom server-side validation.
 
 * Parses `application/x-www-form-urlencoded` to a data container (`ValueMap`)
-  to use as values for the form - support for `multipart/form-data` is
-  planned.
+  to use as values for the form - support for `multipart/form-data` and JSON
+  is planned (most probably using `Serde`'s `Deserialize` trait).
 
 * Serializes to JSON (and other formats) by implementing
   [Serde](https://docs.rs/serde/)'s `Serialize` trait.
 
-*HTML generation functionality is not directly provided*, as users will always
-want to render their HTML in a specific manner. Instead, `HtmlForm`
+**HTML generation functionality is not directly provided**, as users will
+generally want to customize rendering of HTML forms. Instead, `HtmlForm`
 implements [Serde](https://docs.rs/serde/)'s `Serialize`
-trait so it can easily be converted to JSON for client-side rendering or to
-use as datastructure for templating languages like
+trait so it can easily be converted to JSON for client-side rendering, or
+used as datastructure for templating languages like
 [handlebars](https://docs.rs/handlebars/).
 
-Note that this library is in a very early stage, it's not complete yet
-(some attributes and constraints are missing, as is file upload/multipart
-support), the code needs cleanup/repartitioning and there are some things I
-would like to add in the near future (examples of usage to render client-side
-or server-side forms, integration of some i18n library (fluent?), integration
-code for [Actix](https://docs.rs/actix/), [hyper](https://docs.rs/hyper/),
-etc.).
+Note that this library is in a very early stage, there are some things I would
+like to add in the near future (more test, examples of rendering client-side
+and server-side forms, integration of some i18n library
+([fluent](https://docs.rs/fluent/)?), integration code for
+[Actix](https://docs.rs/actix/), [hyper](https://docs.rs/hyper/), etc.) and
+there may certainly be more...
 
 Also note that I am relatively new to Rust, and I am very open to suggestions
 for improvement!
