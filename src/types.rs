@@ -6,6 +6,7 @@ use regex::Regex;
 use crate::error::ValidationError;
 use crate::value::Value;
 
+// XXX use lazy_static for the regs
 pub fn check_date(date: &str) -> bool {
     let reg_date = Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
     reg_date.is_match(date)
@@ -20,6 +21,21 @@ pub fn check_datetime(datetime: &str) -> bool {
 pub fn check_time(time: &str) -> bool {
     let reg_time = Regex::new(r"^\d{2}:\d{2}$").unwrap();
     reg_time.is_match(time)
+}
+
+pub fn check_email(email: &str) -> bool {
+    // rather naive reg, but it should catch most common issues and should
+    // not lead to false negatives
+    let reg_email = Regex::new(r"^\S+@\w[-\.\w]+\.\w{2,}$").unwrap();
+    reg_email.is_match(email)
+}
+
+pub fn check_url(url: &str) -> bool {
+    // rather naive reg, but it should catch most common issues and should
+    // not lead to false negatives - proper url checking is near impossible
+    // using regexps, so I don't want to go there...
+    let reg_url = Regex::new(r"^\w+\:\/\/\w[-\.\w]+(\/\S*)?$").unwrap();
+    reg_url.is_match(url)
 }
 
 /// Methods, correspond to `method` attribute values (note that these
@@ -57,6 +73,49 @@ pub enum Element {
 }
 
 impl Element {
+    /// Validate a value for an element type.
+    pub fn validate(&self, formvalue: &Value)
+            -> Result<(), ValidationError> {
+        match self {
+            Element::Input(InputType::Date) => {
+                if !check_date(&formvalue.to_string()) {
+                    Err(ValidationError::new("invalid date"))
+                } else {
+                    Ok(())
+                }
+            },
+            Element::Input(InputType::Time) => {
+                if !check_time(&formvalue.to_string()) {
+                    Err(ValidationError::new("invalid time"))
+                } else {
+                    Ok(())
+                }
+            },
+            Element::Input(InputType::DateTime) => {
+                if !check_datetime(&formvalue.to_string()) {
+                    Err(ValidationError::new("invalid datetime"))
+                } else {
+                    Ok(())
+                }
+            },
+            Element::Input(InputType::Email) => {
+                if !check_email(&formvalue.to_string()) {
+                    Err(ValidationError::new("invalid email address"))
+                } else {
+                    Ok(())
+                }
+            },
+            Element::Input(InputType::Url) => {
+                if !check_url(&formvalue.to_string()) {
+                    Err(ValidationError::new("invalid url"))
+                } else {
+                    Ok(())
+                }
+            },
+            _ => Ok(())
+        }
+    }
+
     /// Return the element's name (nodeName), used by `HtmlForm` to fill
     /// its `fieldtype` attribute.
     pub fn fieldtype(&self) -> &'static str {
@@ -258,7 +317,7 @@ impl <'a> Constraint<'a> {
                 // format of the date, we can do char by char comparison
                 // to determine whether the provided value is less than min
                 for (i, chr) in value.as_bytes().iter().enumerate() {
-                    if chr < &min.as_bytes()[i] {
+                    if *chr < min.as_bytes()[i] {
                         return Err(ValidationError::new("value too low"));
                     }
                 }
@@ -269,7 +328,7 @@ impl <'a> Constraint<'a> {
                     return Err(ValidationError::new("invalid date"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
-                    if chr > &max.as_bytes()[i] {
+                    if *chr > max.as_bytes()[i] {
                         return Err(ValidationError::new("value too high"));
                     }
                 }
@@ -280,7 +339,7 @@ impl <'a> Constraint<'a> {
                     return Err(ValidationError::new("invalid datetime"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
-                    if chr < &min.as_bytes()[i] {
+                    if *chr < min.as_bytes()[i] {
                         return Err(ValidationError::new("value too low"));
                     }
                 }
@@ -291,7 +350,7 @@ impl <'a> Constraint<'a> {
                     return Err(ValidationError::new("invalid datetime"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
-                    if chr > &max.as_bytes()[i] {
+                    if *chr > max.as_bytes()[i] {
                         return Err(ValidationError::new("value too high"));
                     }
                 }
@@ -302,7 +361,7 @@ impl <'a> Constraint<'a> {
                     return Err(ValidationError::new("invalid time"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
-                    if chr < &min.as_bytes()[i] {
+                    if *chr < min.as_bytes()[i] {
                         return Err(ValidationError::new("value too low"));
                     }
                 }
@@ -313,7 +372,7 @@ impl <'a> Constraint<'a> {
                     return Err(ValidationError::new("invalid time"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
-                    if chr > &max.as_bytes()[i] {
+                    if *chr > max.as_bytes()[i] {
                         return Err(ValidationError::new("value too high"));
                     }
                 }

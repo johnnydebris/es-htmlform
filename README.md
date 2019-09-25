@@ -1,4 +1,4 @@
-# ES HtmlForm
+# HtmlForm
 
 HtmlForm is a library to build, validate and render HTML(5) forms. It aims to
 follow the HTML specifications as closely as possible, and provide a complete
@@ -8,7 +8,8 @@ and the client.
 ## Example
 
 ```rust
-    use htmlform::{HtmlForm, ValueMap, Method, InputType, Constraint, Attr};
+    use htmlform::{HtmlForm, ValueMap);
+    use htmlform::types::{Method, InputType, Constraint, Attr};
 
     fn main() {
         let form = HtmlForm::new(".", Method::Get)

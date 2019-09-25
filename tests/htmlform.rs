@@ -1,4 +1,5 @@
-use htmlform::{HtmlForm, ValueMap, Method, InputType, Attr, Constraint};
+use htmlform::{HtmlForm, ValueMap};
+use htmlform::types::{Method, InputType, Attr, Constraint};
 
 fn testform() -> HtmlForm<'static> {
     HtmlForm::new(".", Method::Post)
@@ -71,3 +72,11 @@ fn test_constraint_not_allowed() {
     assert!(result.is_err());
 }
 
+#[test]
+fn test_element_value_not_allowed() {
+    let result = HtmlForm::new(".", Method::Post)
+        .input(
+            InputType::Email, "foo", "Foo", true, Some("noemail"),
+            vec![], vec![]);
+    assert!(result.is_err());
+}

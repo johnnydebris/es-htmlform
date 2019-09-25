@@ -1,9 +1,8 @@
 //! Library to validate and generate HTML forms.
 //!
 //! ```rust
-//! use htmlform::{
-//!     HtmlForm, ValueMap, InputType, Method, Constraint as Cons, Attr,
-//!     FormError, ValidationError};
+//! use htmlform::{ValueMap, HtmlForm, FormError, ValidationError};
+//! use htmlform::types::{InputType, Method, Constraint as Cons, Attr};
 //!
 //! // simple form with 1 field
 //! fn searchform() -> Result<HtmlForm<'static>, FormError> {
@@ -110,12 +109,11 @@
 //! ```
 
 mod error;
-mod value;
-mod types;
 mod htmlform;
 
+pub mod value;
+pub mod types;
+
 pub use crate::error::{FormError, ValidationError};
-pub use crate::value::{ValueMap, Value, urldecode, UrlDecodingError};
-pub use crate::types::{
-    Method, Element, InputType, SelectType, Constraint, Attr};
+pub use crate::value::{ValueMap, Value};
 pub use crate::htmlform::{HtmlForm, Field};

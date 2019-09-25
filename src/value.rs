@@ -17,7 +17,7 @@ pub struct UrlDecodingError<'a> {
 impl <'a> UrlDecodingError<'a> {
     pub fn new(message: &'a str) -> UrlDecodingError {
         UrlDecodingError {
-            message: message,
+            message,
         }
     }
 }
@@ -133,8 +133,8 @@ impl ValueMap {
         let mut bkey = vec![];
         let mut bvalue = vec![];
         let mut in_value = false;
-        for ref chr in input {
-            let chr = *chr.clone();
+        for chr in input {
+            let chr = chr.clone();
             if chr == eq {
                 if !in_value {
                     in_value = true;
@@ -145,11 +145,15 @@ impl ValueMap {
             } else if chr == amp {
                 let key = urldecode(&bkey)?;
                 let value = urldecode(&bvalue)?;
-                if bvalue.len() > 0 && values.contains_key(&key) {
-                    let keyvalues = values.get_mut(&key).unwrap();
-                    keyvalues.push(Value::new(&value));
+                if !bvalue.is_empty() {
+                    if values.contains_key(&key) {
+                        let keyvalues = values.get_mut(&key).unwrap();
+                        keyvalues.push(Value::new(&value));
+                    } else {
+                        values.insert(key, vec![Value::new(&value)]);
+                    }
                 } else {
-                    values.insert(key, vec![Value::new(&value)]);
+                    values.insert(key, vec![]);
                 }
                 bkey.truncate(0);
                 bvalue.truncate(0);
@@ -161,18 +165,22 @@ impl ValueMap {
             }
         }
         // there should now be 1 key (or pair) left in the buffers
-        if bkey.len() > 0{
+        if !bkey.is_empty() {
             let key = urldecode(&bkey)?;
             let value = urldecode(&bvalue)?;
-            if bvalue.len() > 0 && values.contains_key(&key) {
-                let keyvalues = values.get_mut(&key).unwrap();
-                keyvalues.push(Value::new(&value));
+            if !bvalue.is_empty() {
+                if values.contains_key(&key) {
+                    let keyvalues = values.get_mut(&key).unwrap();
+                    keyvalues.push(Value::new(&value));
+                } else {
+                    values.insert(key, vec![Value::new(&value)]);
+                }
             } else {
-                values.insert(key, vec![Value::new(&value)]);
+                values.insert(key, vec![]);
             }
         }
         let map = ValueMap {
-            values: values,
+            values,
         };
         Ok(map)
     }

@@ -1,4 +1,5 @@
-use htmlform::{ValueMap, Value, urldecode, UrlDecodingError};
+use htmlform::{ValueMap, Value};
+use htmlform::value::{urldecode, UrlDecodingError};
 
 #[test]
 fn test_parse_urlencoded_one_key_one_val() {
@@ -12,8 +13,7 @@ fn test_parse_urlencoded_one_key_one_val() {
 fn test_parse_urlencoded_one_key_no_val() {
     let values = ValueMap::from_urlencoded(b"foo").unwrap();
     assert_eq!(values.len(), 1);
-    assert_eq!(
-        values.get("foo").unwrap(), &vec![Value::new("")]);
+    assert_eq!(values.get("foo").unwrap(), &vec![]);
 }
 
 #[test]

@@ -14,7 +14,8 @@ use crate::types::{
 /// builder-style API makes it relatively easy to define forms:
 ///
 /// ```rust
-/// use htmlform::{HtmlForm, ValueMap, Method, InputType, Constraint, Attr};
+/// use htmlform::{HtmlForm, ValueMap};
+/// use htmlform::types::{Method, InputType, Constraint, Attr};
 ///
 /// fn main() {
 ///     // user input
@@ -41,8 +42,8 @@ impl <'a> HtmlForm<'a> {
     /// Instantiate an HtmlForm.
     pub fn new(action: &'a str, method: Method) -> HtmlForm<'a> {
         HtmlForm {
-            action: action,
-            method: method,
+            action,
+            method,
             errors: HashMap::new(),
             fields: Vec::new(),
         }
@@ -58,7 +59,8 @@ impl <'a> HtmlForm<'a> {
     /// Example:
     ///
     /// ```rust
-    /// use htmlform::{HtmlForm, ValueMap, Method, InputType, Constraint};
+    /// use htmlform::{HtmlForm, ValueMap};
+    /// use htmlform::types::{Method, InputType, Constraint};
     ///
     /// fn main() {
     ///     let form = HtmlForm::new(".", Method::Post)
@@ -76,7 +78,7 @@ impl <'a> HtmlForm<'a> {
         self.errors.drain();
         for field in &mut self.fields {
             let non_empty = values.non_empty_values(&field.name);
-            if non_empty.len() > 0 {
+            if !non_empty.is_empty() {
                 if !field.multi && non_empty.len() > 1 {
                     self.errors.insert(
                         field.name.to_string(),
@@ -278,9 +280,10 @@ impl <'a> HtmlForm<'a> {
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
         let element = Element::Select(
-            match multi {
-                false => SelectType::Single,
-                true => SelectType::Multi,
+            if multi {
+                SelectType::Single
+            } else {
+                SelectType::Multi
             });
         self.element(
             element, name, label, required, values, choices, vec![],
@@ -340,10 +343,15 @@ impl <'a> HtmlForm<'a> {
             -> Result<Self, FormError> {
         let values = match values {
             Some(values) => {
-                Some(
-                    values.iter()
-                        .map(|v| Value::new(v))
-                        .collect())
+                let values: Vec<Value> = values.iter()
+                    .map(|v| Value::new(v))
+                    .collect();
+                for value in values.iter() {
+                    if let Err(e) = element.validate(&value) {
+                        return Err(FormError::new(&e.to_string()));
+                    }
+                }
+                Some(values)
             },
             None => None,
         };
@@ -410,15 +418,15 @@ impl <'a> Field<'a> {
             -> Field<'a> {
         let multi = element.multi();
         Field {
-            name: name,
-            label: label,
-            element: element,
-            required: required,
-            multi: multi,
-            choices: choices,
-            constraints: constraints,
-            attributes: attributes,
-            value: value,
+            name,
+            label,
+            element,
+            required,
+            multi,
+            choices,
+            constraints,
+            attributes,
+            value,
         }
     }
 
@@ -443,7 +451,7 @@ impl <'a> Field<'a> {
     ///
     /// Generally, this method is not called directly, but indirectly by
     /// `HtmlForm`'s `validate_and_set()`.
-    pub fn validate(&self, values: &Vec<&Value>)
+    pub fn validate(&self, values: &[&Value])
             -> Result<(), ValidationError> {
         // validate choices, but only for certain elements (on other
         // elements, choices are (optional) suggestions, usually to
@@ -473,8 +481,9 @@ impl <'a> Field<'a> {
             },
             _ => (),
         }
-        for constraint in self.constraints.iter() {
-            for value in values.iter() {
+        for value in values {
+            self.element.validate(&value)?;
+            for constraint in self.constraints.iter() {
                 constraint.validate(&value)?;
             }
         }
