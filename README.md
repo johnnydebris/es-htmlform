@@ -1,9 +1,9 @@
 # HtmlForm
 
-HtmlForm is a library to build, validate and render HTML(5) forms. It aims to
-follow the HTML specifications as closely as possible, and provide a complete
-solution to easily build valid forms and validate data both on the server
-and the client.
+HtmlForm is a Rust library to build, validate and render HTML(5) forms. It aims
+to follow the HTML specifications as closely as possible, and provide a
+complete solution to easily build valid forms and validate data both on the
+server and the client.
 
 ## Example
 
