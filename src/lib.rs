@@ -38,7 +38,7 @@
 //!         .input(
 //!             InputType::Number, "age", "Age", true, None,
 //!             vec![Cons::MinNumber(18.0)],
-//!             vec![Attr::Step(1.0), Attr::Any("id", "age")])?
+//!             vec![Attr::StepInt(1), Attr::Any("id", "age")])?
 //!         .hidden(
 //!             "csrf", Some("foo"), true,
 //!             vec![Cons::Func(Box::new(|v| {
@@ -117,5 +117,5 @@ mod htmlform;
 pub use crate::error::{FormError, ValidationError};
 pub use crate::value::{ValueMap, Value, urldecode, UrlDecodingError};
 pub use crate::types::{
-    Method, Element, InputType, Select, Constraint, Attr};
+    Method, Element, InputType, SelectType, Constraint, Attr};
 pub use crate::htmlform::{HtmlForm, Field};

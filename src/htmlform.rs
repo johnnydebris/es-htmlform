@@ -5,7 +5,8 @@ use serde::ser::{Serialize, Serializer, SerializeStruct};
 
 use crate::error::{FormError, ValidationError};
 use crate::value::{ValueMap, Value};
-use crate::types::{Method, Element, InputType, Select, Constraint, Attr};
+use crate::types::{
+    Method, Element, InputType, SelectType, ButtonType, Constraint, Attr};
 
 /// `HtmlForm` represents an HTML form. It is used to validate data (both on
 /// the server and the client side) and to serialize forms in a consistent
@@ -278,8 +279,8 @@ impl <'a> HtmlForm<'a> {
             -> Result<Self, FormError> {
         let element = Element::Select(
             match multi {
-                false => Select::Single,
-                true => Select::Multi,
+                false => SelectType::Single,
+                true => SelectType::Multi,
             });
         self.element(
             element, name, label, required, values, choices, vec![],
@@ -314,7 +315,7 @@ impl <'a> HtmlForm<'a> {
     /// Shortcut to create a `button` element. Returns self, so calls can be
     /// chained.
     pub fn button(
-            self, name: &'a str, label: &'a str,
+            self, button_type: ButtonType, name: &'a str, label: &'a str,
             value: Option<&str>,
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
@@ -323,7 +324,7 @@ impl <'a> HtmlForm<'a> {
             None => None,
         };
         self.element(
-            Element::Button, name, label, false, values,
+            Element::Button(button_type), name, label, false, values,
             &[], vec![], attributes)
     }
 
@@ -449,7 +450,7 @@ impl <'a> Field<'a> {
         // populate the `datalist` element for auto-fill).
         match self.element {
             Element::Input(InputType::Checkbox) |
-            Element::Select(Select::Multi) => {
+            Element::Select(SelectType::Multi) => {
                 let choicevalues: Vec<&str> = self.choices.iter()
                     .map(|(value, _)| {
                         *value

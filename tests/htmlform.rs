@@ -19,7 +19,7 @@ fn testform() -> HtmlForm<'static> {
                 Constraint::MinNumber(0.0),
                 Constraint::MaxNumber(10.0),
             ],
-            vec![Attr::Step(0.1)]).unwrap()
+            vec![Attr::StepFloat(0.1)]).unwrap()
 }
 
 #[test]

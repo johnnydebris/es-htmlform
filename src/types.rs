@@ -6,12 +6,30 @@ use regex::Regex;
 use crate::error::ValidationError;
 use crate::value::Value;
 
+pub fn check_date(date: &str) -> bool {
+    let reg_date = Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
+    reg_date.is_match(date)
+}
+
+pub fn check_datetime(datetime: &str) -> bool {
+    let reg_datetime = Regex::new(
+        r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$").unwrap();
+    reg_datetime.is_match(datetime)
+}
+
+pub fn check_time(time: &str) -> bool {
+    let reg_time = Regex::new(r"^\d{2}:\d{2}$").unwrap();
+    reg_time.is_match(time)
+}
+
 /// Methods, correspond to `method` attribute values (note that these
 /// do not correspond to HTTP methods, see specs).
 #[derive(Debug)]
 pub enum Method {
     Get,
     Post,
+    // The `dialog` method can be used for forms in a pop-up, closes
+    // the pop-up on submit (see specs).
     Dialog,
 }
 
@@ -25,25 +43,33 @@ impl Method {
     }
 }
 
+// XXX Note that we miss some elements, we may want to add support for
+// fieldset w. legend (contains a list of fields, should be traversed on
+// validation), optgroup (how? don't like the thought of nested choices?)
+// and output (simple add with no validation, it seems?)
 /// Form element types, each of which results in a different HTML element.
 #[derive(Debug)]
 pub enum Element {
     Input(InputType),
     Textarea,
-    Select(Select),
-    Button,
+    Select(SelectType),
+    Button(ButtonType),
 }
 
 impl Element {
+    /// Return the element's name (nodeName), used by `HtmlForm` to fill
+    /// its `fieldtype` attribute.
     pub fn fieldtype(&self) -> &'static str {
         match &self {
             Element::Input(_) => "input",
             Element::Textarea => "textarea",
             Element::Select(_) => "select",
-            Element::Button => "button",
+            Element::Button(_) => "button",
         }
     }
 
+    /// Return the element's type (`type` attribute), used by `HtmlForm` to
+    /// fill its `subtype` attribute.
     pub fn subtype(&self) -> &'static str {
         match &self {
             Element::Input(input_type) => match input_type {
@@ -64,19 +90,27 @@ impl Element {
                 InputType::Color => "color",
                 InputType::File => "file",
                 InputType::Search => "search",
-                InputType::Hidden => "hidden",
                 InputType::Button => "button",
                 InputType::Reset => "reset",
                 InputType::Submit => "submit",
+                InputType::Image => "image",
+                InputType::Hidden => "hidden",
+            },
+            Element::Button(button_type) => match button_type {
+                ButtonType::Submit => "submit",
+                ButtonType::Reset => "reset",
+                ButtonType::Button => "button",
             },
             _ => "",
         }
     }
 
+    /// Return `true` for multi-selects and checkbox inputs, used by
+    /// `HtmlForm` to fill its `multi` attribute.
     pub fn multi(&self) -> bool {
         match self {
             Element::Input(InputType::Checkbox) |
-            Element::Select(Select::Multi) => true,
+            Element::Select(SelectType::Multi) => true,
             _ => false,
         }
     }
@@ -103,30 +137,86 @@ pub enum InputType {
     Color,
     File,
     Search,
-    Hidden,
     Button,
     Submit,
     Reset,
+    Image,
+    Hidden,
 }
 
-/// Pass this to `Element::Select()` to determine selection behaviour.
+/// Value for `Element::Select()` to determine `select` element behaviour.
 #[derive(Debug)]
-pub enum Select {
+pub enum SelectType {
     Single,
     Multi,
+}
+
+/// Value for `Element::Select()` to determine `select` element behaviour.
+#[derive(Debug)]
+pub enum ButtonType {
+    Submit,
+    Reset,
+    Button,
+}
+
+/// Value for `Attr::Spellcheck()` to determine `textarea` spell checking
+/// behaviour
+#[derive(Debug)]
+pub enum Spellcheck {
+    True,
+    Default,
+    False,
+}
+
+/// Value for `Attr::Wrap()` to determine `textarea` wrapping behaviour
+#[derive(Debug)]
+pub enum Wrap {
+    Hard,
+    Soft,
+    Off,
+}
+
+/// Value for certain on/off fields
+#[derive(Debug)]
+pub enum Switch {
+    On,
+    Off,
 }
 
 /// Constraints on `Field` values, perform validation.
 ///
 /// All of the constraints cause server-side validation to be performed,
 /// all except `Constraint::Func` should - assuming they're serialized
-/// properly - result in client-side validation.
+/// properly - result in client-side validation. HTML validity is checked
+/// when adding the constraints to the fields using `HtmlForm`'s builder
+/// methods.
 pub enum Constraint<'a> {
+    /// Constraint on most inputs.
     MinLength(usize),
+    /// Constraint on most inputs.
     MaxLength(usize),
+    /// Constraint on `number` and `range` inputs.
     MinNumber(f64),
+    /// Constraint on `number` and `range` inputs.
     MaxNumber(f64),
+    /// Constraint on `date` input.
+    MinDate(&'a str),
+    /// Constraint on `date` input.
+    MaxDate(&'a str),
+    /// Constraint on `datetime-local` input.
+    MinDateTime(&'a str),
+    /// Constraint on `datetime-local` input.
+    MaxDateTime(&'a str),
+    /// Constraint on `time` input.
+    MinTime(&'a str),
+    /// Constraint on `time` input.
+    MaxTime(&'a str),
+    /// Constraint on most `Element::Input` fields, causes regex pattern
+    /// validation (both on the server and the client, note that the pattern
+    /// therefore must execute correctly on both sides).
     Pattern(&'a str),
+    /// Constraint on any field, is executed server-side only and not
+    /// serialized.
     Func(Box<Fn(&Value) -> Result<(), ValidationError>>),
 }
 
@@ -157,6 +247,75 @@ impl <'a> Constraint<'a> {
                 let value: f64 = formvalue.parse()?;
                 if value > *max {
                     return Err(ValidationError::new("value too high"));
+                }
+            },
+            Constraint::MinDate(min) => {
+                let value = formvalue.to_string();
+                if !check_date(&value) {
+                    return Err(ValidationError::new("invalid date"));
+                }
+                // somewhat nasty, but taking into account the (fixed)
+                // format of the date, we can do char by char comparison
+                // to determine whether the provided value is less than min
+                for (i, chr) in value.as_bytes().iter().enumerate() {
+                    if chr < &min.as_bytes()[i] {
+                        return Err(ValidationError::new("value too low"));
+                    }
+                }
+            },
+            Constraint::MaxDate(max) => {
+                let value = formvalue.to_string();
+                if !check_date(&value) {
+                    return Err(ValidationError::new("invalid date"));
+                }
+                for (i, chr) in value.as_bytes().iter().enumerate() {
+                    if chr > &max.as_bytes()[i] {
+                        return Err(ValidationError::new("value too high"));
+                    }
+                }
+            },
+            Constraint::MinDateTime(min) => {
+                let value = formvalue.to_string();
+                if !check_datetime(&value) {
+                    return Err(ValidationError::new("invalid datetime"));
+                }
+                for (i, chr) in value.as_bytes().iter().enumerate() {
+                    if chr < &min.as_bytes()[i] {
+                        return Err(ValidationError::new("value too low"));
+                    }
+                }
+            },
+            Constraint::MaxDateTime(max) => {
+                let value = formvalue.to_string();
+                if !check_datetime(&value) {
+                    return Err(ValidationError::new("invalid datetime"));
+                }
+                for (i, chr) in value.as_bytes().iter().enumerate() {
+                    if chr > &max.as_bytes()[i] {
+                        return Err(ValidationError::new("value too high"));
+                    }
+                }
+            },
+            Constraint::MinTime(min) => {
+                let value = formvalue.to_string();
+                if !check_time(&value) {
+                    return Err(ValidationError::new("invalid time"));
+                }
+                for (i, chr) in value.as_bytes().iter().enumerate() {
+                    if chr < &min.as_bytes()[i] {
+                        return Err(ValidationError::new("value too low"));
+                    }
+                }
+            },
+            Constraint::MaxTime(max) => {
+                let value = formvalue.to_string();
+                if !check_time(&value) {
+                    return Err(ValidationError::new("invalid time"));
+                }
+                for (i, chr) in value.as_bytes().iter().enumerate() {
+                    if chr > &max.as_bytes()[i] {
+                        return Err(ValidationError::new("value too high"));
+                    }
                 }
             },
             Constraint::Pattern(pattern) => {
@@ -192,17 +351,38 @@ impl <'a> Constraint<'a> {
                 Some((String::from("min"), min.to_string())),
             Constraint::MaxNumber(max) =>
                 Some((String::from("max"), max.to_string())),
+            Constraint::MinDate(min) |
+            Constraint::MinTime(min) |
+            Constraint::MinDateTime(min) =>
+                Some((String::from("min"), min.to_string())),
+            Constraint::MaxDate(max) |
+            Constraint::MaxTime(max) |
+            Constraint::MaxDateTime(max) =>
+                Some((String::from("max"), max.to_string())),
             Constraint::Pattern(pattern) =>
                 Some((String::from("pattern"), pattern.to_string())),
             Constraint::Func(_) => None,
         }
     }
 
+    /// Return true if this `Constraint` is allowed on `element`,
+    /// false otherwise.
     pub fn allowed_on(&self, element: &Element) -> bool {
         match self {
             Constraint::MinLength(_) |
             Constraint::MaxLength(_) => match element {
-                Element::Input(_) => true,
+                Element::Textarea => true,
+                Element::Input(input_type) => match input_type {
+                    InputType::Radio |
+                    InputType::Checkbox |
+                    InputType::File |
+                    InputType::Button |
+                    InputType::Submit |
+                    InputType::Reset |
+                    InputType::Image |
+                    InputType::Hidden => false,
+                    _ => true,
+                },
                 _ => false,
             },
             Constraint::MinNumber(_) => match element {
@@ -213,7 +393,32 @@ impl <'a> Constraint<'a> {
                 Element::Input(InputType::Number) => true,
                 _ => false,
             },
+            Constraint::MinDate(_) => match element {
+                Element::Input(InputType::Date) => true,
+                _ => false,
+            },
+            Constraint::MaxDate(_) => match element {
+                Element::Input(InputType::Date) => true,
+                _ => false,
+            },
+            Constraint::MinTime(_) => match element {
+                Element::Input(InputType::Time) => true,
+                _ => false,
+            },
+            Constraint::MaxTime(_) => match element {
+                Element::Input(InputType::Time) => true,
+                _ => false,
+            },
+            Constraint::MinDateTime(_) => match element {
+                Element::Input(InputType::DateTime) => true,
+                _ => false,
+            },
+            Constraint::MaxDateTime(_) => match element {
+                Element::Input(InputType::DateTime) => true,
+                _ => false,
+            },
             Constraint::Pattern(_) => match element {
+                Element::Textarea => true,
                 Element::Input(input_type) => match input_type {
                     InputType::Text |
                         InputType::Password |
@@ -246,6 +451,24 @@ impl <'a> fmt::Debug for Constraint<'a> {
             Constraint::MaxNumber(number) => {
                 write!(f, "Constraint::MaxNumber({})", number)
             },
+            Constraint::MinDate(number) => {
+                write!(f, "Constraint::MinDate({})", number)
+            },
+            Constraint::MaxDate(number) => {
+                write!(f, "Constraint::MaxDate({})", number)
+            },
+            Constraint::MinTime(number) => {
+                write!(f, "Constraint::MinTime({})", number)
+            },
+            Constraint::MaxTime(number) => {
+                write!(f, "Constraint::MaxTime({})", number)
+            },
+            Constraint::MinDateTime(number) => {
+                write!(f, "Constraint::MinDateTime({})", number)
+            },
+            Constraint::MaxDateTime(number) => {
+                write!(f, "Constraint::MaxDateTime({})", number)
+            },
             Constraint::Pattern(pattern) => {
                 write!(f, "Constraint::Pattern({})", pattern)
             },
@@ -256,34 +479,217 @@ impl <'a> fmt::Debug for Constraint<'a> {
     }
 }
 
-/// An HTML attribute without validation behaviour.
+// XXX missing 'form' attribute - should we add that?
+/// An HTML attribute without validation behaviour. The list should be
+/// complete and up-to-date with the latest HTML specifications. HTML
+/// validity is checked when adding the attributes to the fields using
+/// `HtmlForm`'s builder methods.
 #[derive(Debug)]
 pub enum Attr<'a> {
+    /// Use to add any attribute to any element without validation.
     Any(&'a str, &'a str),
-    Step(f64),
-    Placeholder(&'a str),
+
+    // general attrs for most elements/inputs
+    Id(&'a str),
     Title(&'a str),
+    Placeholder(&'a str),
+    Autocomplete(Switch),
+    Autofocus,
+    Disabled,
+    Readonly,
+    Tabindex(i64),
+
+    // 'step' for number, range, date, datetime, etc
+    StepFloat(f64),
+    StepInt(u64),
+
+    // rendering hints for most inputs
+    Size(u64),
+    Width(u64),
+    Height(u64),
+
+    // specific to textarea
+    Rows(u64),
+    Cols(u64),
+    Spellcheck(Spellcheck),
+    Wrap(Wrap),
+
+    // control form behaviour from an input, usually buttons (new to HTML 5)
+    FormAction(&'a str),
+    FormEnctype(&'a str),
+    FormNoValidate,
+    FormTarget(&'a str),
 }
 
 impl <'a> Attr<'a> {
     pub fn attrpair(&self) -> (String, String) {
         let (name, value) = match self {
             Attr::Any(name, value) => (name.deref(), value.to_string()),
-            Attr::Step(step) => ("step", step.to_string()),
+            Attr::StepFloat(step) => ("step", step.to_string()),
+            Attr::StepInt(step) => ("step", step.to_string()),
+            Attr::Size(size) => ("size", size.to_string()),
+            Attr::Width(width) => ("width", width.to_string()),
+            Attr::Height(height) => ("height", height.to_string()),
+            Attr::Rows(rows) => ("rows", rows.to_string()),
+            Attr::Cols(cols) => ("cols", cols.to_string()),
+            Attr::Spellcheck(wrap) =>
+                ("wrap", match wrap {
+                    Spellcheck::True => String::from("true"),
+                    Spellcheck::Default => String::from("default"),
+                    Spellcheck::False => String::from("false"),
+                }),
+            Attr::Wrap(wrap) =>
+                ("wrap", match wrap {
+                    Wrap::Hard => String::from("hard"),
+                    Wrap::Soft => String::from("soft"),
+                    Wrap::Off => String::from("off"),
+                }),
+            Attr::FormAction(formaction) =>
+                ("formaction", formaction.to_string()),
+            Attr::FormEnctype(formenctype) =>
+                ("formenctype", formenctype.to_string()),
+            Attr::FormNoValidate => (
+                "formnovalidate", String::from("formnovalidate")),
+            Attr::FormTarget(formtarget) =>
+                ("formtarget", formtarget.to_string()),
+            Attr::Id(id) => ("id", id.to_string()),
+            Attr::Title(label) => ("title", label.to_string()),
             Attr::Placeholder(label) =>
                 ("placeholder", label.to_string()),
-            Attr::Title(label) => ("title", label.to_string())
+            Attr::Autocomplete(autocomplete) =>
+                ("autocomplete", match autocomplete {
+                    Switch::On => String::from("on"),
+                    Switch::Off => String::from("off"),
+                }),
+            Attr::Autofocus => ("autofocus", String::from("autofocus")),
+            Attr::Disabled => ("disabled", String::from("disabled")),
+            Attr::Readonly => ("readonly", String::from("readonly")),
+            Attr::Tabindex(tabindex) => ("tabindex", tabindex.to_string()),
         };
         (String::from(name), value)
     }
 
     pub fn allowed_on(&self, element: &Element) -> bool {
-        match self {
-            Attr::Any(_, _) |
-            Attr::Placeholder(_) |
-            Attr::Title(_) => true,
-            Attr::Step(_) => match element {
-                Element::Input(InputType::Number) => true,
+        match element {
+            Element::Input(input_type) => match self {
+                Attr::Any(_, _) |
+                Attr::Id(_) |
+                // title makes no sense on some elements, but does seem
+                // to be allowed on all...
+                Attr::Title(_) => true,
+                Attr::StepFloat(_) => match input_type {
+                    InputType::Number => true,
+                    _ => false,
+                },
+                Attr::StepInt(_) => match input_type {
+                    InputType::Number |
+                    InputType::Date |
+                    InputType::Time |
+                    InputType::DateTime |
+                    InputType::Month |
+                    InputType::Week |
+                    InputType::Range => true,
+                    _ => false,
+                },
+                Attr::Width(_) |
+                Attr::Height(_) => match input_type {
+                    InputType::Image => true,
+                    _ => false,
+                },
+                Attr::Rows(_) |
+                Attr::Cols(_) |
+                Attr::Spellcheck(_) |
+                Attr::Wrap(_) => false,
+                Attr::FormAction(_) |
+                Attr::FormEnctype(_) |
+                Attr::FormTarget(_) => match input_type {
+                    InputType::Submit |
+                    InputType::Image => true,
+                    _ => false,
+                },
+                Attr::FormNoValidate => match input_type {
+                    InputType::Submit => true,
+                    _ => false,
+                },
+                Attr::Placeholder(_) => match input_type {
+                    InputType::Text |
+                    InputType::Password |
+                    InputType::Email |
+                    InputType::Url |
+                    InputType::Tel |
+                    InputType::Search => true,
+                    _ => false,
+                },
+                Attr::Autocomplete(_) => match input_type {
+                    InputType::Text |
+                    InputType::Email |
+                    InputType::Url |
+                    InputType::Tel |
+                    InputType::Search |
+                    InputType::Date |
+                    InputType::DateTime |
+                    InputType::Month | // XXX ?
+                    InputType::Week | // XXX ?
+                    InputType::Time | // XXX ?
+                    InputType::Range |
+                    InputType::Color => true,
+                    _ => false,
+                },
+                Attr::Autofocus => match input_type {
+                    InputType::Button |
+                    InputType::Submit |
+                    InputType::Reset |
+                    InputType::Image |
+                    InputType::Hidden => false,
+                    _ => true,
+                },
+                Attr::Size(_) |
+                Attr::Disabled |
+                Attr::Readonly |
+                Attr::Tabindex(_) => match input_type {
+                    InputType::Hidden => false,
+                    _ => true,
+                },
+            },
+            Element::Textarea => match self {
+                Attr::Any(_, _) |
+                Attr::Id(_) |
+                Attr::Title(_) |
+                Attr::Placeholder(_) |
+                Attr::Autocomplete(_) |
+                Attr::Autofocus |
+                Attr::Disabled |
+                Attr::Readonly |
+                Attr::Rows(_) |
+                Attr::Cols(_) |
+                Attr::Spellcheck(_) |
+                Attr::Wrap(_) => true,
+                _ => false,
+            },
+            Element::Select(_) => match self {
+                Attr::Any(_, _) |
+                Attr::Id(_) |
+                Attr::Title(_) |
+                Attr::Autocomplete(_) |
+                Attr::Autofocus |
+                Attr::Disabled |
+                Attr::Readonly |
+                Attr::Size(_) |
+                _ => false,
+            },
+            Element::Button(_) => match self {
+                Attr::Any(_, _) |
+                Attr::Id(_) |
+                Attr::Title(_) |
+                Attr::Autocomplete(_) |
+                Attr::Autofocus |
+                Attr::Disabled |
+                Attr::Readonly |
+                Attr::FormAction(_) |
+                Attr::FormEnctype(_) |
+                Attr::FormTarget(_) |
+                Attr::FormNoValidate |
+                Attr::Size(_) |
                 _ => false,
             },
         }
