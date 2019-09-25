@@ -1,4 +1,5 @@
-use htmlform::{HtmlForm, ValueMap};
+use htmlform::HtmlForm;
+use htmlform::value::{ValueMap, Value};
 use htmlform::types::{Method, InputType, Attr, Constraint};
 
 fn testform() -> HtmlForm<'static> {
@@ -67,7 +68,7 @@ fn test_form_validation_func() {
 fn test_constraint_not_allowed() {
     let result = HtmlForm::new(".", Method::Post)
         .input(
-            InputType::Color, "foo", "Foo", true, None,
+            InputType::Date, "foo", "Foo", true, None,
             vec![Constraint::MaxNumber(5.0)], vec![]);
     assert!(result.is_err());
 }
@@ -79,4 +80,12 @@ fn test_element_value_not_allowed() {
             InputType::Email, "foo", "Foo", true, Some("noemail"),
             vec![], vec![]);
     assert!(result.is_err());
+}
+
+#[test]
+fn modify_field() {
+    let mut form = testform();
+    assert!(form.getone::<String>("foo").is_err());
+    form.fields[0].set_values(vec![&Value::new("foo")]);
+    assert_eq!(form.getone::<String>("foo").unwrap(), "foo");
 }

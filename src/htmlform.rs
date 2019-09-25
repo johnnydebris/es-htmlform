@@ -14,7 +14,8 @@ use crate::types::{
 /// builder-style API makes it relatively easy to define forms:
 ///
 /// ```rust
-/// use htmlform::{HtmlForm, ValueMap};
+/// use htmlform::HtmlForm;
+/// use htmlform::value::ValueMap;
 /// use htmlform::types::{Method, InputType, Constraint, Attr};
 ///
 /// fn main() {
@@ -59,7 +60,8 @@ impl <'a> HtmlForm<'a> {
     /// Example:
     ///
     /// ```rust
-    /// use htmlform::{HtmlForm, ValueMap};
+    /// use htmlform::HtmlForm;
+    /// use htmlform::value::ValueMap;
     /// use htmlform::types::{Method, InputType, Constraint};
     ///
     /// fn main() {
@@ -77,22 +79,24 @@ impl <'a> HtmlForm<'a> {
             -> Self {
         self.errors.drain();
         for field in &mut self.fields {
-            let non_empty = values.non_empty_values(&field.name);
-            if !non_empty.is_empty() {
-                if !field.multi && non_empty.len() > 1 {
+            if let Some(values) = values.values(&field.name) {
+                if !field.element.multi() && values.len() > 1 {
                     self.errors.insert(
                         field.name.to_string(),
                         String::from("field can only have one value"));
                 } else {
-                    if let Err(e) = field.validate(&non_empty) {
+                    let values: Vec<&Value> = values.iter()
+                        .map(|v| v)
+                        .collect();
+                    if let Err(e) = field.validate(&values) {
                         self.errors.insert(
                             field.name.to_string(), format!("{}", e));
                     }
-                    field.set_values(non_empty);
+                    field.set_values(values);
                 }
             } else {
                 // set default (empty) value
-                field.set_default_value();
+                field.empty();
                 if field.required {
                     self.errors.insert(
                         field.name.to_string(),
@@ -105,10 +109,10 @@ impl <'a> HtmlForm<'a> {
 
     /// Return a `Field` by name, or an error if there is not field by that
     /// name.
-    pub fn field(&self, name: &str) -> Result<&Field<'a>, FormError> {
-        for field in &self.fields {
+    pub fn field(self, name: &str) -> Result<Field<'a>, FormError> {
+        for field in self.fields {
             if field.name == name {
-                return Ok(&field);
+                return Ok(field);
             }
         }
         Err(FormError::new("no such field"))
@@ -122,7 +126,7 @@ impl <'a> HtmlForm<'a> {
             where T: FromStr {
         for field in &self.fields {
             if field.name == name {
-                return match &field.value {
+                return match &field.values {
                     Some(_) => {
                         let mut converted: Vec<T> = Vec::new();
                         for value in field.values() {
@@ -146,7 +150,7 @@ impl <'a> HtmlForm<'a> {
             where T: FromStr {
         for field in &self.fields {
             if field.name == name {
-                return match &field.value {
+                return match &field.values {
                     Some(_) => {
                         let values = field.values();
                         if values.len() == 1 {
@@ -397,9 +401,8 @@ pub struct Field<'a> {
     label: &'a str,
     element: Element,
     required: bool,
-    multi: bool,
     choices: &'a[(&'a str, &'a str)],
-    value: Option<Vec<Value>>,
+    values: Option<Vec<Value>>,
     attributes: Vec<Attr<'a>>,
     constraints: Vec<Constraint<'a>>,
 }
@@ -412,27 +415,25 @@ impl <'a> Field<'a> {
     /// arguments.
     pub fn new(
             name: &'a str, label: &'a str, element: Element,
-            required: bool, value: Option<Vec<Value>>,
+            required: bool, values: Option<Vec<Value>>,
             choices: &'a[(&'a str, &'a str)],
             constraints: Vec<Constraint<'a>>, attributes: Vec<Attr<'a>>)
             -> Field<'a> {
-        let multi = element.multi();
         Field {
             name,
             label,
             element,
             required,
-            multi,
             choices,
             constraints,
             attributes,
-            value,
+            values,
         }
     }
 
-    /// Returns a `Vec` of 0 or more non-empty values from self.value.
+    /// Returns a `Vec` of 0 or more non-empty values from self.values.
     pub fn values(&self) -> Vec<Value> {
-        match &self.value {
+        match &self.values {
             None => Vec::new(),
             Some(value) =>
                 value.iter()
@@ -446,7 +447,7 @@ impl <'a> Field<'a> {
     ///
     /// Note that this assumes `values` contains the correct amount of
     /// non-empty values for this `Field`, so dealing with errors
-    /// regarding `self.required` and `self.multi` should be done before
+    /// regarding `self.required` and amount of values should be done before
     /// this method is called.
     ///
     /// Generally, this method is not called directly, but indirectly by
@@ -490,16 +491,18 @@ impl <'a> Field<'a> {
         Ok(())
     }
 
-    pub(crate) fn set_default_value(&mut self) {
-        self.value = Some(Vec::new());
+    /// Clear the `Field`'s values.
+    pub fn empty(&mut self) {
+        self.values = Some(Vec::new());
     }
 
-    pub(crate) fn set_values(&mut self, values: Vec<&Value>) {
+    /// Set the `Field`'s values.
+    pub fn set_values(&mut self, values: Vec<&Value>) {
         let mut clone = Vec::new();
         for value in values {
             clone.push(Value::new(&value.as_string()));
         }
-        self.value = Some(clone);
+        self.values = Some(clone);
     }
 }
 
@@ -512,7 +515,7 @@ impl <'a> Serialize for Field<'a> {
         s.serialize_field("fieldtype", &self.element.fieldtype())?;
         s.serialize_field("subtype", &self.element.subtype())?;
         s.serialize_field("required", &self.required)?;
-        s.serialize_field("multi", &self.multi)?;
+        s.serialize_field("multi", &self.element.multi())?;
         s.serialize_field("choices", &self.choices)?;
 
         // attributes combines self.constraints and self.attributes
@@ -528,14 +531,14 @@ impl <'a> Serialize for Field<'a> {
         }
         s.serialize_field("attributes", &attributesmap)?;
 
-        // value is a single value (or None) if self.multi == false,
+        // value is a single value (or None) if self.element.multi() == false,
         // else it's a list
-        match &self.multi {
+        match &self.element.multi() {
             true => {
-                s.serialize_field("value", &self.value)?;
+                s.serialize_field("value", &self.values)?;
             },
             false => {
-                match &self.value {
+                match &self.values {
                     Some(value) => {
                         let strvalue = if value.len() == 1 {
                             match self.element {
@@ -549,7 +552,7 @@ impl <'a> Serialize for Field<'a> {
                         s.serialize_field("value", &strvalue)?;
                     },
                     None => {
-                        s.serialize_field("value", &self.value)?;
+                        s.serialize_field("value", &self.values)?;
                     },
                 }
             },

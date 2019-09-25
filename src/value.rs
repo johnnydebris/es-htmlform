@@ -106,23 +106,14 @@ pub struct ValueMap {
 }
 
 impl ValueMap {
-    pub fn new(_values: HashMap<String, Vec<Value>>) -> ValueMap {
+    pub fn new(values: HashMap<String, Vec<Value>>) -> ValueMap {
         ValueMap {
-            values: HashMap::new(),
+            values,
         }
     }
 
-    pub fn non_empty_values(&self, key: &str) -> Vec<&Value> {
-        let values = match self.values.get(key) {
-            Some(value) => value,
-            None => return Vec::new(),
-        };
-        values
-            .iter()
-            .filter(|v| {
-                v.0 != ""
-            })
-            .collect()
+    pub fn values(&self, name: &str) -> Option<&Vec<Value>> {
+        self.values.get(name)
     }
 
     pub fn from_urlencoded(input: &[u8]) ->

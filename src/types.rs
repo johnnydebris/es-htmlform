@@ -1,3 +1,17 @@
+//! Enums representing HTML elements, attributes and values.
+//!
+//! These should be complete according to the HTML specifications, all
+//! elements and all element-specific attributes should be represented,
+//! in such a way that your form structure and values will always be
+//! valid (assuming that you use the `HtmlForm` builder methods to set
+//! up the form, else form structure validity is not checked). Note that
+//! the values of the `Constraint` enum (mostly) represent HTML attributes
+//! that cause client-side validation, when used server-side validation
+//! is also performed. One exception is `Constraint::Func()`, which is
+//! used for per-element server-side validation and is not serialized
+//! as client-side attribute. Attributes in the `Attr` enum do not cause
+//! value validation.
+
 use std::fmt;
 use std::ops::Deref;
 
@@ -7,30 +21,30 @@ use crate::error::ValidationError;
 use crate::value::Value;
 
 // XXX use lazy_static for the regs
-pub fn check_date(date: &str) -> bool {
+fn validate_date(date: &str) -> bool {
     let reg_date = Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
     reg_date.is_match(date)
 }
 
-pub fn check_datetime(datetime: &str) -> bool {
+fn validate_datetime(datetime: &str) -> bool {
     let reg_datetime = Regex::new(
         r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$").unwrap();
     reg_datetime.is_match(datetime)
 }
 
-pub fn check_time(time: &str) -> bool {
+fn validate_time(time: &str) -> bool {
     let reg_time = Regex::new(r"^\d{2}:\d{2}$").unwrap();
     reg_time.is_match(time)
 }
 
-pub fn check_email(email: &str) -> bool {
+fn validate_email(email: &str) -> bool {
     // rather naive reg, but it should catch most common issues and should
     // not lead to false negatives
     let reg_email = Regex::new(r"^\S+@\w[-\.\w]+\.\w{2,}$").unwrap();
     reg_email.is_match(email)
 }
 
-pub fn check_url(url: &str) -> bool {
+fn validate_url(url: &str) -> bool {
     // rather naive reg, but it should catch most common issues and should
     // not lead to false negatives - proper url checking is near impossible
     // using regexps, so I don't want to go there...
@@ -38,8 +52,8 @@ pub fn check_url(url: &str) -> bool {
     reg_url.is_match(url)
 }
 
-/// Methods, correspond to `method` attribute values (note that these
-/// do not correspond to HTTP methods, see specs).
+/// Form methods, correspond to `method` attribute values (note that these
+/// do not correspond to HTTP methods per se, see specs).
 #[derive(Debug)]
 pub enum Method {
     Get,
@@ -63,7 +77,7 @@ impl Method {
 // fieldset w. legend (contains a list of fields, should be traversed on
 // validation), optgroup (how? don't like the thought of nested choices?)
 // and output (simple add with no validation, it seems?)
-/// Form element types, each of which results in a different HTML element.
+/// Form element types, each of which represent a different HTML element.
 #[derive(Debug)]
 pub enum Element {
     Input(InputType),
@@ -78,35 +92,35 @@ impl Element {
             -> Result<(), ValidationError> {
         match self {
             Element::Input(InputType::Date) => {
-                if !check_date(&formvalue.to_string()) {
+                if !validate_date(&formvalue.to_string()) {
                     Err(ValidationError::new("invalid date"))
                 } else {
                     Ok(())
                 }
             },
             Element::Input(InputType::Time) => {
-                if !check_time(&formvalue.to_string()) {
+                if !validate_time(&formvalue.to_string()) {
                     Err(ValidationError::new("invalid time"))
                 } else {
                     Ok(())
                 }
             },
             Element::Input(InputType::DateTime) => {
-                if !check_datetime(&formvalue.to_string()) {
+                if !validate_datetime(&formvalue.to_string()) {
                     Err(ValidationError::new("invalid datetime"))
                 } else {
                     Ok(())
                 }
             },
             Element::Input(InputType::Email) => {
-                if !check_email(&formvalue.to_string()) {
+                if !validate_email(&formvalue.to_string()) {
                     Err(ValidationError::new("invalid email address"))
                 } else {
                     Ok(())
                 }
             },
             Element::Input(InputType::Url) => {
-                if !check_url(&formvalue.to_string()) {
+                if !validate_url(&formvalue.to_string()) {
                     Err(ValidationError::new("invalid url"))
                 } else {
                     Ok(())
@@ -210,7 +224,7 @@ pub enum SelectType {
     Multi,
 }
 
-/// Value for `Element::Select()` to determine `select` element behaviour.
+/// Value for `Element::Button()` to determine `button` element behaviour.
 #[derive(Debug)]
 pub enum ButtonType {
     Submit,
@@ -219,7 +233,7 @@ pub enum ButtonType {
 }
 
 /// Value for `Attr::Spellcheck()` to determine `textarea` spell checking
-/// behaviour
+/// behaviour.
 #[derive(Debug)]
 pub enum Spellcheck {
     True,
@@ -227,7 +241,7 @@ pub enum Spellcheck {
     False,
 }
 
-/// Value for `Attr::Wrap()` to determine `textarea` wrapping behaviour
+/// Value for `Attr::Wrap()` to determine `textarea` wrapping behaviour.
 #[derive(Debug)]
 pub enum Wrap {
     Hard,
@@ -235,9 +249,9 @@ pub enum Wrap {
     Off,
 }
 
-/// Value for certain on/off fields
+/// Value for `Attr::Autocomplete()`.
 #[derive(Debug)]
-pub enum Switch {
+pub enum Autocomplete {
     On,
     Off,
 }
@@ -310,7 +324,7 @@ impl <'a> Constraint<'a> {
             },
             Constraint::MinDate(min) => {
                 let value = formvalue.to_string();
-                if !check_date(&value) {
+                if !validate_date(&value) {
                     return Err(ValidationError::new("invalid date"));
                 }
                 // somewhat nasty, but taking into account the (fixed)
@@ -324,7 +338,7 @@ impl <'a> Constraint<'a> {
             },
             Constraint::MaxDate(max) => {
                 let value = formvalue.to_string();
-                if !check_date(&value) {
+                if !validate_date(&value) {
                     return Err(ValidationError::new("invalid date"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
@@ -335,7 +349,7 @@ impl <'a> Constraint<'a> {
             },
             Constraint::MinDateTime(min) => {
                 let value = formvalue.to_string();
-                if !check_datetime(&value) {
+                if !validate_datetime(&value) {
                     return Err(ValidationError::new("invalid datetime"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
@@ -346,7 +360,7 @@ impl <'a> Constraint<'a> {
             },
             Constraint::MaxDateTime(max) => {
                 let value = formvalue.to_string();
-                if !check_datetime(&value) {
+                if !validate_datetime(&value) {
                     return Err(ValidationError::new("invalid datetime"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
@@ -357,7 +371,7 @@ impl <'a> Constraint<'a> {
             },
             Constraint::MinTime(min) => {
                 let value = formvalue.to_string();
-                if !check_time(&value) {
+                if !validate_time(&value) {
                     return Err(ValidationError::new("invalid time"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
@@ -368,7 +382,7 @@ impl <'a> Constraint<'a> {
             },
             Constraint::MaxTime(max) => {
                 let value = formvalue.to_string();
-                if !check_time(&value) {
+                if !validate_time(&value) {
                     return Err(ValidationError::new("invalid time"));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
@@ -552,7 +566,7 @@ pub enum Attr<'a> {
     Id(&'a str),
     Title(&'a str),
     Placeholder(&'a str),
-    Autocomplete(Switch),
+    Autocomplete(Autocomplete),
     Autofocus,
     Disabled,
     Readonly,
@@ -617,8 +631,8 @@ impl <'a> Attr<'a> {
                 ("placeholder", label.to_string()),
             Attr::Autocomplete(autocomplete) =>
                 ("autocomplete", match autocomplete {
-                    Switch::On => String::from("on"),
-                    Switch::Off => String::from("off"),
+                    Autocomplete::On => String::from("on"),
+                    Autocomplete::Off => String::from("off"),
                 }),
             Attr::Autofocus => ("autofocus", String::from("autofocus")),
             Attr::Disabled => ("disabled", String::from("disabled")),

@@ -8,7 +8,8 @@ server and the client.
 ## Example
 
 ```rust
-    use htmlform::{HtmlForm, ValueMap);
+    use htmlform::HtmlForm;
+    use htmlform::value::ValueMap;
     use htmlform::types::{Method, InputType, Constraint, Attr};
 
     fn main() {
@@ -16,7 +17,7 @@ server and the client.
             .input(
                 InputType::Text, "q", "Search", true, None,
                 vec![Constraint::MinLength(2)],
-                vec![Attr::Placeholder("enter value...")]
+                vec![Attr::Placeholder("enter value"), Attr::Autofocus]
                 ).unwrap()
             .submit(None, "go!", vec![]).unwrap();
 
