@@ -9,7 +9,7 @@
 //! fn searchform() -> Result<HtmlForm<'static>, FormError> {
 //!     Ok(HtmlForm::new(".", Method::Get)
 //!         .input(
-//!             InputType::Text, "q", "Search", true, None,
+//!             InputType::Text, "q", "Search", true,
 //!             vec![], vec![Attr::Placeholder("enter query")])?
 //!         .submit(None, "go!", vec![])?)
 //! }
@@ -19,16 +19,16 @@
 //! fn userform() -> Result<HtmlForm<'static>, FormError> {
 //!     Ok(HtmlForm::new(".", Method::Post)
 //!         .input(
-//!             InputType::Text, "username", "Username", true, None,
+//!             InputType::Text, "username", "Username", true,
 //!             vec![
 //!                 Cons::MinLength(5), Cons::MaxLength(16),
 //!                 Cons::Pattern(r"^\w+$")],
 //!             vec![])?
 //!         .input(
-//!             InputType::Text, "name", "Full name", true, None,
+//!             InputType::Text, "name", "Full name", true,
 //!             vec![Cons::MinLength(0), Cons::MaxLength(64)], vec![])?
 //!         .input(
-//!             InputType::Password, "password", "Password", true, None,
+//!             InputType::Password, "password", "Password", true,
 //!             vec![
 //!                 Cons::MinLength(6), Cons::MaxLength(64),
 //!                 Cons::Pattern(r"(\d.*[^\w\s\d]|[^\w\s\d].*\d)"),
@@ -36,7 +36,7 @@
 //!             vec![Attr::Title(
 //!                 "Must contain 1 number and 1 non-word character")])?
 //!         .input(
-//!             InputType::Number, "age", "Age", true, None,
+//!             InputType::Number, "age", "Age", true,
 //!             vec![Cons::MinNumber(18.0)],
 //!             vec![Attr::StepInt(1), Attr::Any("id", "age")])?
 //!         .hidden(
@@ -49,14 +49,14 @@
 //!                 }
 //!             }))],
 //!             vec![])?
-//!         .textarea("message", "Message", false, None, vec![])?
+//!         .textarea("message", "Message", false, vec![])?
 //!         .submit(None, "Submit", vec![])?
 //!     )
 //! }
 //!
 //! fn main() {
 //!     let values = ValueMap::from_urlencoded(b"q=foo").unwrap();
-//!     let form = searchform().unwrap().validate_and_set(values);
+//!     let form = searchform().unwrap().validate_and_set(values, true);
 //!
 //!     println!("{}", serde_json::to_string_pretty(&form).unwrap());
 //!     assert_eq!(form.errors.len(), 0);
@@ -98,7 +98,7 @@
 //!     let values = ValueMap::from_urlencoded(
 //!         b"username=johnny&name=Johnny&password=foobar-123&age=46&csrf=bar"
 //!     ).unwrap();
-//!     let form = userform().unwrap().validate_and_set(values);
+//!     let form = userform().unwrap().validate_and_set(values, true);
 //!
 //!     assert_eq!(form.errors.len(), 1);
 //!     assert_eq!(

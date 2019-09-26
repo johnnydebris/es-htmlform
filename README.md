@@ -15,7 +15,7 @@ server and the client.
     fn main() {
         let form = HtmlForm::new(".", Method::Get)
             .input(
-                InputType::Text, "q", "Search", true, None,
+                InputType::Text, "q", "Search", true,
                 vec![Constraint::MinLength(2)],
                 vec![Attr::Placeholder("enter value"), Attr::Autofocus]
                 ).unwrap()

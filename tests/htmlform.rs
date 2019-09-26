@@ -1,22 +1,22 @@
 use htmlform::HtmlForm;
 use htmlform::value::{ValueMap, Value};
-use htmlform::types::{Method, InputType, Attr, Constraint};
+use htmlform::types::{Method, Element, InputType, Attr, Constraint};
 
 fn testform() -> HtmlForm<'static> {
     HtmlForm::new(".", Method::Post)
         .input(
-            InputType::Text, "foo", "Foo", true, None,
+            InputType::Text, "foo", "Foo", true,
             vec![Constraint::MinLength(0), Constraint::MaxLength(10)],
             vec![]).unwrap()
         .input(
-            InputType::Text, "bar", "Bar", true, None,
+            InputType::Text, "bar", "Bar", true,
             vec![
                 Constraint::MinLength(0),
                 Constraint::MaxLength(10),
                 Constraint::Pattern("^[a-z]+$")],
             vec![]).unwrap()
         .input(
-            InputType::Number, "baz", "Baz", false, None,
+            InputType::Number, "baz", "Baz", false,
             vec![
                 Constraint::MinNumber(0.0),
                 Constraint::MaxNumber(10.0),
@@ -35,7 +35,7 @@ fn test_form_validation_success() {
     let values = ValueMap::from_urlencoded(
         b"foo=1&bar=abc&baz=3").unwrap();
     let form = testform()
-        .validate_and_set(values);
+        .validate_and_set(values, true);
     assert_eq!(form.errors.len(), 0);
 }
 
@@ -43,7 +43,7 @@ fn test_form_validation_success() {
 fn test_form_validation_missing_required() {
     let values = ValueMap::from_urlencoded(b"foo=1&baz=3").unwrap();
     let form = testform()
-        .validate_and_set(values);
+        .validate_and_set(values, true);
     assert_eq!(form.errors.len(), 1);
     assert_eq!(
         form.errors.keys().collect::<Vec<&String>>(), vec!["bar"]);
@@ -57,10 +57,10 @@ fn test_form_validation_func() {
     let values = ValueMap::from_urlencoded(b"foo=1").unwrap();
     let form = HtmlForm::new(".", Method::Post)
         .input(
-            InputType::Text, "foo", "Foo", true, None,
+            InputType::Text, "foo", "Foo", true,
             vec![Constraint::Func(Box::new(|_| Ok(())))], vec![],
         ).unwrap()
-        .validate_and_set(values);
+        .validate_and_set(values, true);
     assert_eq!(form.errors.len(), 0);
 }
 
@@ -68,7 +68,7 @@ fn test_form_validation_func() {
 fn test_constraint_not_allowed() {
     let result = HtmlForm::new(".", Method::Post)
         .input(
-            InputType::Date, "foo", "Foo", true, None,
+            InputType::Date, "foo", "Foo", true,
             vec![Constraint::MaxNumber(5.0)], vec![]);
     assert!(result.is_err());
 }
@@ -76,9 +76,9 @@ fn test_constraint_not_allowed() {
 #[test]
 fn test_element_value_not_allowed() {
     let result = HtmlForm::new(".", Method::Post)
-        .input(
-            InputType::Email, "foo", "Foo", true, Some("noemail"),
-            vec![], vec![]);
+        .element(
+            Element::Input(InputType::Email), "foo", "Foo",
+            true, Some(vec!["noemail"]), &[], vec![], vec![]);
     assert!(result.is_err());
 }
 

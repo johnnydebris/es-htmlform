@@ -23,10 +23,10 @@ use crate::types::{
 ///     let values = ValueMap::from_urlencoded(b"foo=bar").unwrap();
 ///     let form = HtmlForm::new(".", Method::Post)
 ///         .input(
-///             InputType::Text, "foo", "Foo", true, None,
+///             InputType::Text, "foo", "Foo", true,
 ///             vec![], vec![]).unwrap()
 ///         .submit(None, "Submit", vec![]).unwrap()
-///         .validate_and_set(values);
+///         .validate_and_set(values, true);
 ///     assert_eq!(form.errors.len(), 0);
 ///     assert_eq!(form.getone::<String>("foo").unwrap(), "bar");
 /// }
@@ -67,15 +67,15 @@ impl <'a> HtmlForm<'a> {
     /// fn main() {
     ///     let form = HtmlForm::new(".", Method::Post)
     ///         .input(
-    ///             InputType::Text, "foo", "Foo", true, None,
+    ///             InputType::Text, "foo", "Foo", true,
     ///             vec![Constraint::MinLength(5)], vec![]).unwrap()
     ///         .validate_and_set(
-    ///             ValueMap::from_urlencoded(b"foo=bar").unwrap());
+    ///             ValueMap::from_urlencoded(b"foo=bar").unwrap(), true);
     ///    assert_eq!(form.errors.get("foo").unwrap(), "value too short");
     ///    assert_eq!(form.get::<String>("foo").unwrap(), vec!["bar"]);
     /// }
     /// ```
-    pub fn validate_and_set(mut self, values: ValueMap)
+    pub fn validate_and_set(mut self, values: ValueMap, check_required: bool)
             -> Self {
         self.errors.drain();
         for field in &mut self.fields {
@@ -97,7 +97,7 @@ impl <'a> HtmlForm<'a> {
             } else {
                 // set default (empty) value
                 field.empty();
-                if field.required {
+                if check_required && field.required {
                     self.errors.insert(
                         field.name.to_string(),
                         String::from("no value for required field"));
@@ -174,15 +174,11 @@ impl <'a> HtmlForm<'a> {
     /// be chained.
     pub fn input(
             self, input_type: InputType, name: &'a str, label: &'a str,
-            required: bool, value: Option<&str>,
-            constraints: Vec<Constraint<'a>>, attributes: Vec<Attr<'a>>)
+            required: bool, constraints: Vec<Constraint<'a>>,
+            attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
-        let values = match value {
-            Some(value) => Some(vec![value]),
-            None => None,
-        };
         self.element(
-            Element::Input(input_type), name, label, required, values,
+            Element::Input(input_type), name, label, required, None,
             &[], constraints, attributes)
     }
 
@@ -190,38 +186,31 @@ impl <'a> HtmlForm<'a> {
     /// can be chained.
     pub fn checkbox(
             self, name: &'a str, label: &'a str,
-            required: bool, values: Option<Vec<&str>>,
-            choices: &'a[(&'a str, &'a str)],
+            required: bool, choices: &'a[(&'a str, &'a str)],
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
         self.element(
             Element::Input(InputType::Checkbox), name, label, required,
-            values, choices, vec![], attributes)
+            None, choices, vec![], attributes)
     }
 
     /// Shortcut to create a set of `radio` buttons. Returns self, so calls
     /// can be chained.
     pub fn radio(
             self, name: &'a str, label: &'a str,
-            required: bool, value: Option<&str>,
-            choices: &'a[(&'a str, &'a str)],
+            required: bool, choices: &'a[(&'a str, &'a str)],
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
-        let values = match value {
-            Some(value) => Some(vec![value]),
-            None => None,
-        };
         self.element(
             Element::Input(InputType::Checkbox), name, label, required,
-            values, choices, vec![], attributes)
+            None, choices, vec![], attributes)
     }
 
     /// Shortcut to create a text(-style) `input` with `datalist`
     /// for auto-fill suggestions. Returns self, so calls can be chained.
     pub fn datalist_input(
             self, input_type: InputType, name: &'a str, label: &'a str,
-            required: bool, value: Option<&str>,
-            datalist: &'a[(&'a str, &'a str)],
+            required: bool, datalist: &'a[(&'a str, &'a str)],
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
         match input_type {
@@ -237,12 +226,8 @@ impl <'a> HtmlForm<'a> {
             },
             _ => (),
         }
-        let values = match value {
-            Some(value) => Some(vec![value]),
-            None => None,
-        };
         self.element(
-            Element::Input(input_type), name, label, required, values,
+            Element::Input(input_type), name, label, required, None,
             datalist, vec![], attributes)
     }
 
@@ -264,14 +249,10 @@ impl <'a> HtmlForm<'a> {
     /// so calls can be chained.
     pub fn textarea(
             self, name: &'a str, label: &'a str, required: bool,
-            value: Option<&str>, attributes: Vec<Attr<'a>>)
+            attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
-        let values = match value {
-            Some(value) => Some(vec![value]),
-            None => None,
-        };
         self.element(
-            Element::Textarea, name, label, required, values,
+            Element::Textarea, name, label, required, None,
             &[], vec![], attributes)
     }
 
@@ -279,8 +260,7 @@ impl <'a> HtmlForm<'a> {
     /// be chained.
     pub fn select(
             self, name: &'a str, label: &'a str, multi: bool,
-            required: bool, values: Option<Vec<&str>>,
-            choices: &'a[(&'a str, &'a str)],
+            required: bool, choices: &'a[(&'a str, &'a str)],
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
         let element = Element::Select(
@@ -290,7 +270,7 @@ impl <'a> HtmlForm<'a> {
                 SelectType::Multi
             });
         self.element(
-            element, name, label, required, values, choices, vec![],
+            element, name, label, required, None, choices, vec![],
             attributes)
     }
 
@@ -323,15 +303,10 @@ impl <'a> HtmlForm<'a> {
     /// chained.
     pub fn button(
             self, button_type: ButtonType, name: &'a str, label: &'a str,
-            value: Option<&str>,
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
-        let values = match value {
-            Some(value) => Some(vec![value]),
-            None => None,
-        };
         self.element(
-            Element::Button(button_type), name, label, false, values,
+            Element::Button(button_type), name, label, false, None,
             &[], vec![], attributes)
     }
 
