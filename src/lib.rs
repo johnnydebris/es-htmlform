@@ -49,14 +49,14 @@
 //!                 }
 //!             }))],
 //!             vec![])?
-//!         .textarea("message", "Message", false, vec![])?
+//!         .textarea("message", "Message", false, vec![], vec![])?
 //!         .submit(None, "Submit", vec![])?
 //!     )
 //! }
 //!
 //! fn main() {
 //!     let values = ValueMap::from_urlencoded(b"q=foo").unwrap();
-//!     let form = searchform().unwrap().validate_and_set(values, true);
+//!     let form = searchform().unwrap().validate_and_set(&values, true);
 //!
 //!     println!("{}", serde_json::to_string_pretty(&form).unwrap());
 //!     assert_eq!(form.errors.len(), 0);
@@ -98,7 +98,7 @@
 //!     let values = ValueMap::from_urlencoded(
 //!         b"username=johnny&name=Johnny&password=foobar-123&age=46&csrf=bar"
 //!     ).unwrap();
-//!     let form = userform().unwrap().validate_and_set(values, true);
+//!     let form = userform().unwrap().validate_and_set(&values, true);
 //!
 //!     assert_eq!(form.errors.len(), 1);
 //!     assert_eq!(

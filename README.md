@@ -22,7 +22,7 @@ server and the client.
             .submit(None, "go!", vec![]).unwrap();
 
         let values = ValueMap::from_urlencoded(b"q=foo").unwrap();
-        form.validate_and_set(values);
+        form.validate_and_set(&values);
 
         assert_eq!(form.errors.len(), 0);
         assert_eq!(form.getone::<String>("q").unwrap(), "foo");

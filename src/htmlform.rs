@@ -26,7 +26,7 @@ use crate::types::{
 ///             InputType::Text, "foo", "Foo", true,
 ///             vec![], vec![]).unwrap()
 ///         .submit(None, "Submit", vec![]).unwrap()
-///         .validate_and_set(values, true);
+///         .validate_and_set(&values, true);
 ///     assert_eq!(form.errors.len(), 0);
 ///     assert_eq!(form.getone::<String>("foo").unwrap(), "bar");
 /// }
@@ -70,12 +70,12 @@ impl <'a> HtmlForm<'a> {
     ///             InputType::Text, "foo", "Foo", true,
     ///             vec![Constraint::MinLength(5)], vec![]).unwrap()
     ///         .validate_and_set(
-    ///             ValueMap::from_urlencoded(b"foo=bar").unwrap(), true);
+    ///             &ValueMap::from_urlencoded(b"foo=bar").unwrap(), true);
     ///    assert_eq!(form.errors.get("foo").unwrap(), "value too short");
     ///    assert_eq!(form.get::<String>("foo").unwrap(), vec!["bar"]);
     /// }
     /// ```
-    pub fn validate_and_set(mut self, values: ValueMap, check_required: bool)
+    pub fn validate_and_set(mut self, values: &ValueMap, check_required: bool)
             -> Self {
         self.errors.drain();
         for field in &mut self.fields {
@@ -249,11 +249,11 @@ impl <'a> HtmlForm<'a> {
     /// so calls can be chained.
     pub fn textarea(
             self, name: &'a str, label: &'a str, required: bool,
-            attributes: Vec<Attr<'a>>)
+            constraints: Vec<Constraint<'a>>, attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
         self.element(
             Element::Textarea, name, label, required, None,
-            &[], vec![], attributes)
+            &[], constraints, attributes)
     }
 
     /// Shortcut to create a `select` dropdown. Returns self, so calls can
