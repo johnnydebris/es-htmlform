@@ -21,12 +21,12 @@ use crate::types::{
 /// fn main() {
 ///     // user input
 ///     let values = ValueMap::from_urlencoded(b"foo=bar").unwrap();
-///     let form = HtmlForm::new(".", Method::Post)
+///     let mut form = HtmlForm::new(".", Method::Post)
 ///         .input(
 ///             InputType::Text, "foo", "Foo", true,
 ///             vec![], vec![]).unwrap()
-///         .submit(None, "Submit", vec![]).unwrap()
-///         .validate_and_set(&values, true);
+///         .submit(None, "Submit", vec![]).unwrap();
+///     form.update(&values, true);
 ///     assert_eq!(form.errors.len(), 0);
 ///     assert_eq!(form.getone::<String>("foo").unwrap(), "bar");
 /// }
@@ -65,18 +65,17 @@ impl <'a> HtmlForm<'a> {
     /// use htmlform::types::{Method, InputType, Constraint};
     ///
     /// fn main() {
-    ///     let form = HtmlForm::new(".", Method::Post)
+    ///     let mut form = HtmlForm::new(".", Method::Post)
     ///         .input(
     ///             InputType::Text, "foo", "Foo", true,
-    ///             vec![Constraint::MinLength(5)], vec![]).unwrap()
-    ///         .validate_and_set(
-    ///             &ValueMap::from_urlencoded(b"foo=bar").unwrap(), true);
+    ///             vec![Constraint::MinLength(5)], vec![]).unwrap();
+    ///     form.update(
+    ///         &ValueMap::from_urlencoded(b"foo=bar").unwrap(), true);
     ///    assert_eq!(form.errors.get("foo").unwrap(), "value too short");
     ///    assert_eq!(form.get::<String>("foo").unwrap(), vec!["bar"]);
     /// }
     /// ```
-    pub fn validate_and_set(mut self, values: &ValueMap, check_required: bool)
-            -> Self {
+    pub fn update(&mut self, values: &ValueMap, check_required: bool) {
         self.errors.drain();
         for field in &mut self.fields {
             if let Some(values) = values.values(&field.name) {
@@ -104,7 +103,6 @@ impl <'a> HtmlForm<'a> {
                 }
             }
         }
-        self
     }
 
     /// Return a `Field` by name, or an error if there is not field by that
@@ -426,7 +424,7 @@ impl <'a> Field<'a> {
     /// this method is called.
     ///
     /// Generally, this method is not called directly, but indirectly by
-    /// `HtmlForm`'s `validate_and_set()`.
+    /// `HtmlForm`'s `update()`.
     pub fn validate(&self, values: &[&Value])
             -> Result<(), ValidationError> {
         // validate choices, but only for certain elements (on other
@@ -487,8 +485,8 @@ impl <'a> Serialize for Field<'a> {
         let mut s = serializer.serialize_struct("Field", 9)?;
         s.serialize_field("name", &self.name)?;
         s.serialize_field("label", &self.label)?;
-        s.serialize_field("fieldtype", &self.element.fieldtype())?;
-        s.serialize_field("subtype", &self.element.subtype())?;
+        s.serialize_field("element", &self.element.element_name())?;
+        s.serialize_field("type", &self.element.element_type())?;
         s.serialize_field("required", &self.required)?;
         s.serialize_field("multi", &self.element.multi())?;
         s.serialize_field("choices", &self.choices)?;

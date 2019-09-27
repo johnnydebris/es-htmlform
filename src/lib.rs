@@ -56,7 +56,8 @@
 //!
 //! fn main() {
 //!     let values = ValueMap::from_urlencoded(b"q=foo").unwrap();
-//!     let form = searchform().unwrap().validate_and_set(&values, true);
+//!     let mut form = searchform().unwrap();
+//!     form.update(&values, true);
 //!
 //!     println!("{}", serde_json::to_string_pretty(&form).unwrap());
 //!     assert_eq!(form.errors.len(), 0);
@@ -71,8 +72,8 @@
 //!     {
 //!       "name": "q",
 //!       "label": "Search",
-//!       "fieldtype": "input",
-//!       "subtype": "text",
+//!       "element": "input",
+//!       "type": "text",
 //!       "required": true,
 //!       "multi": false,
 //!       "choices": [],
@@ -84,8 +85,8 @@
 //!     {
 //!       "name": "",
 //!       "label": "go!",
-//!       "fieldtype": "input",
-//!       "subtype": "submit",
+//!       "element": "input",
+//!       "type": "submit",
 //!       "required": false,
 //!       "multi": false,
 //!       "choices": [],
@@ -98,7 +99,8 @@
 //!     let values = ValueMap::from_urlencoded(
 //!         b"username=johnny&name=Johnny&password=foobar-123&age=46&csrf=bar"
 //!     ).unwrap();
-//!     let form = userform().unwrap().validate_and_set(&values, true);
+//!     let mut form = userform().unwrap();
+//!     form.update(&values, true);
 //!
 //!     assert_eq!(form.errors.len(), 1);
 //!     assert_eq!(

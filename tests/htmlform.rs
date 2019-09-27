@@ -34,16 +34,16 @@ fn test_form_build() {
 fn test_form_validation_success() {
     let values = ValueMap::from_urlencoded(
         b"foo=1&bar=abc&baz=3").unwrap();
-    let form = testform()
-        .validate_and_set(&values, true);
+    let mut form = testform();
+    form.update(&values, true);
     assert_eq!(form.errors.len(), 0);
 }
 
 #[test]
 fn test_form_validation_missing_required() {
     let values = ValueMap::from_urlencoded(b"foo=1&baz=3").unwrap();
-    let form = testform()
-        .validate_and_set(&values, true);
+    let mut form = testform();
+    form.update(&values, true);
     assert_eq!(form.errors.len(), 1);
     assert_eq!(
         form.errors.keys().collect::<Vec<&String>>(), vec!["bar"]);
@@ -55,12 +55,12 @@ fn test_form_validation_missing_required() {
 #[test]
 fn test_form_validation_func() {
     let values = ValueMap::from_urlencoded(b"foo=1").unwrap();
-    let form = HtmlForm::new(".", Method::Post)
+    let mut form = HtmlForm::new(".", Method::Post)
         .input(
             InputType::Text, "foo", "Foo", true,
             vec![Constraint::Func(Box::new(|_| Ok(())))], vec![],
-        ).unwrap()
-        .validate_and_set(&values, true);
+        ).unwrap();
+    form.update(&values, true);
     assert_eq!(form.errors.len(), 0);
 }
 

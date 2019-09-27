@@ -131,8 +131,8 @@ impl Element {
     }
 
     /// Return the element's name (nodeName), used by `HtmlForm` to fill
-    /// its `fieldtype` attribute.
-    pub fn fieldtype(&self) -> &'static str {
+    /// its `element` attribute.
+    pub fn element_name(&self) -> &'static str {
         match &self {
             Element::Input(_) => "input",
             Element::Textarea => "textarea",
@@ -142,8 +142,8 @@ impl Element {
     }
 
     /// Return the element's type (`type` attribute), used by `HtmlForm` to
-    /// fill its `subtype` attribute.
-    pub fn subtype(&self) -> &'static str {
+    /// fill its `type` attribute.
+    pub fn element_type(&self) -> &'static str {
         match &self {
             Element::Input(input_type) => match input_type {
                 InputType::Text => "text",

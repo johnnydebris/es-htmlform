@@ -13,7 +13,7 @@ server and the client.
     use htmlform::types::{Method, InputType, Constraint, Attr};
 
     fn main() {
-        let form = HtmlForm::new(".", Method::Get)
+        let mut form = HtmlForm::new(".", Method::Get)
             .input(
                 InputType::Text, "q", "Search", true,
                 vec![Constraint::MinLength(2)],
@@ -22,7 +22,7 @@ server and the client.
             .submit(None, "go!", vec![]).unwrap();
 
         let values = ValueMap::from_urlencoded(b"q=foo").unwrap();
-        form.validate_and_set(&values);
+        form.update(&values, true);
 
         assert_eq!(form.errors.len(), 0);
         assert_eq!(form.getone::<String>("q").unwrap(), "foo");
