@@ -4,8 +4,6 @@ use std::error::Error;
 use std::ops::Deref;
 use std::collections::HashMap;
 
-use serde::ser::{Serialize, Serializer};
-
 use crate::ValidationError;
 
 /// Error to denote `urldecode()` fails.
@@ -214,12 +212,5 @@ impl Deref for Value {
 
     fn deref(&self) -> &Self::Target {
         &self.0
-    }
-}
-
-impl Serialize for Value {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where S: Serializer {
-        serializer.serialize_str(&self.0)
     }
 }

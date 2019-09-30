@@ -116,6 +116,7 @@ mod htmlform;
 
 pub mod value;
 pub mod types;
+mod serde;
 
 pub use crate::error::{FormError, ValidationError};
 pub use crate::htmlform::{HtmlForm, Field};

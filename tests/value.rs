@@ -53,3 +53,54 @@ fn test_parse_urlencoded_encoded_invalid_char() {
 fn test_parse_urldecode_plus() {
     assert_eq!(urldecode(b"foo+bar").unwrap(), "foo bar");
 }
+
+#[test]
+fn test_deserialize() {
+    let values = serde_json::from_str::<ValueMap>(r#"{"foo":"bar"}"#).unwrap();
+    assert_eq!(values.values("foo").unwrap(), &vec![Value::new("bar")]);
+
+    let values = serde_json::from_str::<ValueMap>(
+        r#"{"foo":["bar"]}"#).unwrap();
+    assert_eq!(values.values("foo").unwrap(), &vec![Value::new("bar")]);
+
+    let values = serde_json::from_str::<ValueMap>(
+        r#"{"foo":["bar","baz"]}"#).unwrap();
+    assert_eq!(
+        values.values("foo").unwrap(),
+        &vec![Value::new("bar"), Value::new("baz")]);
+
+    let values = serde_json::from_str::<ValueMap>(r#"{"foo":123}"#).unwrap();
+    assert_eq!(values.values("foo").unwrap(), &vec![Value::new("123")]);
+
+    let values = serde_json::from_str::<ValueMap>(
+        r#"{"foo":[123, 456]}"#).unwrap();
+    assert_eq!(
+        values.values("foo").unwrap(),
+        &vec![Value::new("123"), Value::new("456")]);
+
+    let values = serde_json::from_str::<ValueMap>(r#"{"foo":123.4}"#).unwrap();
+    assert_eq!(values.values("foo").unwrap(), &vec![Value::new("123.4")]);
+
+    let values = serde_json::from_str::<ValueMap>(
+        r#"{"foo":[123.4, 456.7]}"#).unwrap();
+    assert_eq!(
+        values.values("foo").unwrap(),
+        &vec![Value::new("123.4"), Value::new("456.7")]);
+
+    let values = serde_json::from_str::<ValueMap>(r#"{"foo":-123}"#).unwrap();
+    assert_eq!(values.values("foo").unwrap(), &vec![Value::new("-123")]);
+
+    let values = serde_json::from_str::<ValueMap>(
+        r#"{"foo":[-123, -456]}"#).unwrap();
+    assert_eq!(
+        values.values("foo").unwrap(),
+        &vec![Value::new("-123"), Value::new("-456")]);
+
+    let values = serde_json::from_str::<ValueMap>(
+        r#"{"foo":true,"bar":false}"#).unwrap();
+    assert_eq!(values.values("foo").unwrap(), &vec![Value::new("on")]);
+    assert_eq!(values.values("bar").unwrap(), &vec![Value::new("off")]);
+
+    let values = serde_json::from_str::<ValueMap>(r#"{"foo":null}"#).unwrap();
+    assert_eq!(values.values("foo").unwrap(), &vec![]);
+}
