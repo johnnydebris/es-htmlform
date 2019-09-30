@@ -154,13 +154,22 @@ impl <'a> HtmlForm<'a> {
                 return match &field.values {
                     Some(_) => {
                         let values = field.values();
-                        if values.len() == 1 {
-                            Ok(values[0].parse()?)
-                        } else {
-                            Err(FormError::new(
-                                &format!(
-                                    "field {} has more than one value",
-                                    name)))
+                        match values.len() {
+                            0 => {
+                                Err(FormError::new(
+                                    &format!(
+                                        "field {} has more no value",
+                                        name)))
+                            },
+                            1 => {
+                                Ok(values[0].parse()?)
+                            },
+                            _ => {
+                                Err(FormError::new(
+                                    &format!(
+                                        "field {} has more than one value",
+                                        name)))
+                            },
                         }
                     },
                     None => Err(FormError::new(
