@@ -158,7 +158,7 @@ impl <'a> HtmlForm<'a> {
                             0 => {
                                 Err(FormError::new(
                                     &format!(
-                                        "field {} has more no value",
+                                        "field {} has no value",
                                         name)))
                             },
                             1 => {
