@@ -214,7 +214,7 @@ impl <'a> HtmlForm<'a> {
             attributes: Vec<Attr<'a>>)
             -> Result<Self, FormError> {
         self.element(
-            Element::Input(InputType::Checkbox), name, label, required,
+            Element::Input(InputType::Radio), name, label, required,
             None, choices, vec![], attributes)
     }
 
