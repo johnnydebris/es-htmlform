@@ -71,8 +71,10 @@ impl <'a> HtmlForm<'a> {
     ///             vec![Constraint::MinLength(5)], vec![]).unwrap();
     ///     form.update(
     ///         &ValueMap::from_urlencoded(b"foo=bar").unwrap(), true);
-    ///    assert_eq!(form.errors.get("foo").unwrap(), "value too short");
-    ///    assert_eq!(form.get::<String>("foo").unwrap(), vec!["bar"]);
+    ///     assert_eq!(
+    ///         form.errors.get("foo").unwrap(),
+    ///         "Must be at least 5 characters long.");
+    ///     assert_eq!(form.get::<String>("foo").unwrap(), vec!["bar"]);
     /// }
     /// ```
     pub fn update(&mut self, values: &ValueMap, check_required: bool) {
@@ -113,7 +115,7 @@ impl <'a> HtmlForm<'a> {
                 return Ok(field);
             }
         }
-        Err(FormError::new("no such field"))
+        Err(FormError::new(&format!("no field named {}", name)))
     }
 
     /// Return a list of values of a field. Returns an error when the
@@ -132,12 +134,13 @@ impl <'a> HtmlForm<'a> {
                         }
                         Ok(converted)
                     },
-                    None => Err(
-                        FormError::new("field has no value")),
+                    None => Err(FormError::new(
+                        &format!("field {} has no value", name))),
                 };
             }
         }
-        Err(FormError::new("field not found"))
+        Err(FormError::new(
+            &format!("field {} not found", name)))
     }
 
     /// Return a single value for a field. Returns an error when the
@@ -155,15 +158,17 @@ impl <'a> HtmlForm<'a> {
                             Ok(values[0].parse()?)
                         } else {
                             Err(FormError::new(
-                                "field has more than one value"))
+                                &format!(
+                                    "field {} has more than one value",
+                                    name)))
                         }
                     },
-                    None => Err(
-                        FormError::new("field has no value")),
+                    None => Err(FormError::new(
+                        &format!("field {} has no value", name))),
                 };
             }
         }
-        Err(FormError::new("field not found"))
+        Err(FormError::new(&format!("field {} not found", name)))
     }
 
     /// Shortcut to create an `input` element, use this for non-collection
@@ -220,7 +225,10 @@ impl <'a> HtmlForm<'a> {
             InputType::Button |
             InputType::Submit |
             InputType::Reset => {
-                return Err(FormError::new("invalid input type"));
+                return Err(FormError::new(
+                    &format!(
+                        "invalid input type {:?} for datalist input",
+                        input_type)));
             },
             _ => (),
         }
@@ -334,12 +342,14 @@ impl <'a> HtmlForm<'a> {
         };
         for constraint in constraints.iter() {
             if !constraint.allowed_on(&element) {
-                return Err(FormError::new("constraint not allowed"));
+                return Err(FormError::new(
+                    &format!("constraint {:?} not allowed", constraint)));
             }
         }
         for attribute in attributes.iter() {
             if !attribute.allowed_on(&element) {
-                return Err(FormError::new("attribute not allowed"));
+                return Err(FormError::new(
+                    &format!("attribute {:?} not allowed", attribute)));
             }
         }
         self.fields.push(Field::new(
@@ -441,7 +451,9 @@ impl <'a> Field<'a> {
                 for value in values {
                     let value_str = value.as_string();
                     if !choicevalues.contains(&value_str.as_str()) {
-                        return Err(ValidationError::new("invalid choice"));
+                        return Err(ValidationError::new(
+                            &format!(
+                                "{} is not a valid choice.", value_str)));
                     }
                     let split: Vec<&[&Value]> = values
                         .split(|v| v == value)
@@ -449,7 +461,9 @@ impl <'a> Field<'a> {
                     if split.len() > 2 {
                         return Err(
                             ValidationError::new(
-                                "value provided more than once"));
+                                &format!(
+                                    "Value {} provided more than once.",
+                                    value_str)));
                     }
                 }
             },

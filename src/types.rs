@@ -93,35 +93,43 @@ impl Element {
         match self {
             Element::Input(InputType::Date) => {
                 if !validate_date(&formvalue.to_string()) {
-                    Err(ValidationError::new("invalid date"))
+                    Err(ValidationError::new(
+                        &format!("Invalid date {}.", formvalue.as_string())))
                 } else {
                     Ok(())
                 }
             },
             Element::Input(InputType::Time) => {
                 if !validate_time(&formvalue.to_string()) {
-                    Err(ValidationError::new("invalid time"))
+                    Err(ValidationError::new(
+                        &format!("Invalid time {}.", formvalue.as_string())))
                 } else {
                     Ok(())
                 }
             },
             Element::Input(InputType::DateTime) => {
                 if !validate_datetime(&formvalue.to_string()) {
-                    Err(ValidationError::new("invalid datetime"))
+                    Err(ValidationError::new(
+                        &format!(
+                            "Invalid datetime {}.", formvalue.as_string())))
                 } else {
                     Ok(())
                 }
             },
             Element::Input(InputType::Email) => {
                 if !validate_email(&formvalue.to_string()) {
-                    Err(ValidationError::new("invalid email address"))
+                    Err(ValidationError::new(
+                        &format!(
+                            "Invalid email address {}.",
+                            formvalue.as_string())))
                 } else {
                     Ok(())
                 }
             },
             Element::Input(InputType::Url) => {
                 if !validate_url(&formvalue.to_string()) {
-                    Err(ValidationError::new("invalid url"))
+                    Err(ValidationError::new(
+                        &format!("Invalid url {}", formvalue.as_string())))
                 } else {
                     Ok(())
                 }
@@ -301,93 +309,121 @@ impl <'a> Constraint<'a> {
             Constraint::MinLength(min) => {
                 let value = formvalue.as_string();
                 if value.len() < *min {
-                    return Err(ValidationError::new("value too short"));
+                    return Err(ValidationError::new(
+                        &format!(
+                            "Must be at least {} characters long.",
+                            min)));
                 }
             },
             Constraint::MaxLength(max) => {
                 let value = formvalue.as_string();
                 if value.len() > *max {
-                    return Err(ValidationError::new("value too long"));
+                    return Err(ValidationError::new(
+                        &format!(
+                            "Can not be more than {} characters long.",
+                            max)));
                 }
             },
             Constraint::MinNumber(min) => {
                 let value: f64 = formvalue.parse()?;
                 if value < *min {
-                    return Err(ValidationError::new("value too low"));
+                    return Err(ValidationError::new(
+                        &format!("Must be at least {}.", min)));
                 }
             },
             Constraint::MaxNumber(max) => {
                 let value: f64 = formvalue.parse()?;
                 if value > *max {
-                    return Err(ValidationError::new("value too high"));
+                    return Err(ValidationError::new(
+                        &format!("Can not be more than {}.", max)));
                 }
             },
             Constraint::MinDate(min) => {
                 let value = formvalue.to_string();
                 if !validate_date(&value) {
-                    return Err(ValidationError::new("invalid date"));
+                    return Err(ValidationError::new(
+                        &format!("Invalid date {}.", value)));
                 }
                 // somewhat nasty, but taking into account the (fixed)
                 // format of the date, we can do char by char comparison
                 // to determine whether the provided value is less than min
                 for (i, chr) in value.as_bytes().iter().enumerate() {
                     if *chr < min.as_bytes()[i] {
-                        return Err(ValidationError::new("value too low"));
+                        return Err(ValidationError::new(
+                            &format!(
+                                "Date should be after {}.", min)));
                     }
                 }
             },
             Constraint::MaxDate(max) => {
                 let value = formvalue.to_string();
                 if !validate_date(&value) {
-                    return Err(ValidationError::new("invalid date"));
+                    return Err(ValidationError::new(
+                        &format!("Invalid date {}.", value)));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
                     if *chr > max.as_bytes()[i] {
-                        return Err(ValidationError::new("value too high"));
+                        return Err(ValidationError::new(
+                            &format!(
+                                "Date can not be after {}.", max)));
                     }
                 }
             },
             Constraint::MinDateTime(min) => {
                 let value = formvalue.to_string();
                 if !validate_datetime(&value) {
-                    return Err(ValidationError::new("invalid datetime"));
+                    return Err(ValidationError::new(
+                        &format!("Invalid date and time {}.", value)));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
                     if *chr < min.as_bytes()[i] {
-                        return Err(ValidationError::new("value too low"));
+                        return Err(ValidationError::new(
+                            &format!(
+                                "Date and time must be after {}",
+                                min)));
                     }
                 }
             },
             Constraint::MaxDateTime(max) => {
                 let value = formvalue.to_string();
                 if !validate_datetime(&value) {
-                    return Err(ValidationError::new("invalid datetime"));
+                    return Err(ValidationError::new(
+                        &format!("Invalid date and time {}.", value)));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
                     if *chr > max.as_bytes()[i] {
-                        return Err(ValidationError::new("value too high"));
+                        return Err(ValidationError::new(
+                            &format!(
+                                "Date and time can not be after {}.",
+                                max)));
                     }
                 }
             },
             Constraint::MinTime(min) => {
                 let value = formvalue.to_string();
                 if !validate_time(&value) {
-                    return Err(ValidationError::new("invalid time"));
+                    return Err(ValidationError::new(
+                        &format!("Invalid time {}.", value)));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
                     if *chr < min.as_bytes()[i] {
-                        return Err(ValidationError::new("value too low"));
+                        return Err(ValidationError::new(
+                            &format!(
+                                "Time must be after {}.", min)));
                     }
                 }
             },
             Constraint::MaxTime(max) => {
                 let value = formvalue.to_string();
                 if !validate_time(&value) {
-                    return Err(ValidationError::new("invalid time"));
+                    return Err(ValidationError::new(
+                        &format!("Invalid time {}.", value)));
                 }
                 for (i, chr) in value.as_bytes().iter().enumerate() {
                     if *chr > max.as_bytes()[i] {
-                        return Err(ValidationError::new("value too high"));
+                        return Err(ValidationError::new(
+                            &format!(
+                                "Time can not be after {}.", max)));
                     }
                 }
             },
@@ -396,11 +432,13 @@ impl <'a> Constraint<'a> {
                 let reg = match Regex::new(pattern) {
                     Ok(reg) => reg,
                     Err(_) => return Err(
-                        ValidationError::new("invalid pattern")),
+                        ValidationError::new(
+                            &format!("Invalid pattern {:?}.", value))),
                 };
                 if !reg.is_match(&value) {
                     return Err(
-                        ValidationError::new("pattern did not match"));
+                        ValidationError::new(
+                            &format!("Please match the format requested.")));
                 }
             },
             Constraint::Func(validator) => {

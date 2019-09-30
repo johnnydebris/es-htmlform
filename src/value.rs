@@ -69,7 +69,7 @@ pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError<'static>> {
         if chr == percent {
             if input.len() < i + 2 {
                 return Err(
-                    UrlDecodingError::new("missing encoding character"));
+                    UrlDecodingError::new("unexpected end of input"));
             }
             // we now have 2 ascii chars (u8), which should be numbers,
             // depicting 2 character a hexdecimal number when combined,
@@ -201,7 +201,8 @@ impl Value {
             where T: FromStr {
         match self.0.parse() {
             Ok(value) => Ok(value),
-            Err(_) => Err(ValidationError::new("invalid value")),
+            Err(_) => Err(ValidationError::new(
+                &format!("cannot convert {:?}", self.0))),
         }
     }
 }
