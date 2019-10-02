@@ -33,7 +33,7 @@ client and on the server.
 
 ## Features
 
-* Follows a builder-style pattern to safely build correct form structures.
+* Follows a builder-style pattern to build correct form structures.
 
 * Provides a complete set of enums for all HTML elements and attributes,
   with HTML validity checks and value validation on building the form.
@@ -43,12 +43,12 @@ client and on the server.
 
 * Allows per-field custom server-side validation.
 
-* Parses `application/x-www-form-urlencoded` to a data container (`ValueMap`)
-  to use as values for the form - support for `multipart/form-data` and JSON
-  is planned (most probably using `Serde`'s `Deserialize` trait).
-
 * Serializes to JSON (and other formats) by implementing
   [Serde](https://docs.rs/serde/)'s `Serialize` trait.
+
+* Deserializes from JSON and other formats (e.g. urlencoded using Actix'
+  `Form` extractor) by implementing [Serde](https://docs.rs/serde/)'s
+  `Deserialize` trait.
 
 **HTML generation functionality is not directly provided**, as users will
 generally want to customize rendering of HTML forms. Instead, `HtmlForm`
@@ -59,10 +59,9 @@ used as datastructure for templating languages like
 
 Note that this library is in a very early stage, there are some things I would
 like to add in the near future (more test, examples of rendering client-side
-and server-side forms, integration of some i18n library
-([fluent](https://docs.rs/fluent/)?), integration code for
-[Actix](https://docs.rs/actix/), [hyper](https://docs.rs/hyper/), etc.) and
-there may certainly be more...
+and server-side forms, integration of some i18n library for error messages,
+integration code for [Actix](https://docs.rs/actix/),
+[hyper](https://docs.rs/hyper/), etc.) and there may certainly be more...
 
 Also note that I am relatively new to Rust, and I am very open to suggestions
 for improvement!
