@@ -1,9 +1,9 @@
 # HtmlForm
 
 HtmlForm is a Rust library to build, validate and render HTML(5) forms. It aims
-to follow the HTML specifications as closely as possible, and provide a
-complete solution to easily build valid forms and validate data both on the
-server and the client.
+to follow the HTML specifications as closely as possible, and to provide a
+complete solution to easily build correct forms and validate data both in the
+client and on the server.
 
 ## Example
 
@@ -18,7 +18,7 @@ server and the client.
                 InputType::Text, "q", "Search", true,
                 vec![Constraint::MinLength(2)],
                 vec![Attr::Placeholder("enter value"), Attr::Autofocus]
-                ).unwrap()
+            ).unwrap()
             .submit(None, "go!", vec![]).unwrap();
 
         let values = ValueMap::from_urlencoded(b"q=foo").unwrap();
