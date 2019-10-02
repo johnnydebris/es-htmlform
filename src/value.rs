@@ -110,6 +110,18 @@ impl ValueMap {
         }
     }
 
+    pub fn from_vec(vec: Vec<(&str, Vec<&str>)>) -> ValueMap {
+        let mut values: HashMap<String, Vec<Value>> = HashMap::new();
+        for (name, strvalues) in vec {
+            values.insert(
+                String::from(name),
+                strvalues.iter().map(|v| Value::new(v)).collect());
+        }
+        ValueMap {
+            values,
+        }
+    }
+
     pub fn values(&self, name: &str) -> Option<&Vec<Value>> {
         self.values.get(name)
     }
