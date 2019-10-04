@@ -85,7 +85,7 @@ fn test_element_value_not_allowed() {
 #[test]
 fn modify_field() {
     let mut form = testform();
-    assert!(form.getone::<String>("foo").is_err());
+    assert!(form.get_string("foo").is_err());
     form.fields[0].set_values(vec![&Value::new("foo")]);
-    assert_eq!(form.getone::<String>("foo").unwrap(), "foo");
+    assert_eq!(form.get_string("foo").unwrap(), "foo");
 }

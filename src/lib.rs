@@ -61,7 +61,7 @@
 //!
 //!     println!("{}", serde_json::to_string_pretty(&form).unwrap());
 //!     assert_eq!(form.errors.len(), 0);
-//!     assert_eq!(form.getone::<String>("q").unwrap(), "foo");
+//!     assert_eq!(form.get_string("q").unwrap(), "foo");
 //!     assert_eq!(
 //!         serde_json::to_string_pretty(&form).unwrap(),
 //!         r#"{
@@ -105,9 +105,9 @@
 //!     assert_eq!(form.errors.len(), 1);
 //!     assert_eq!(
 //!         form.errors.get("csrf").unwrap(), "invalid CSRF token");
-//!     assert_eq!(form.getone::<String>("username").unwrap(), "johnny");
-//!     assert_eq!(form.getone::<String>("password").unwrap(), "foobar-123");
-//!     assert_eq!(form.getone::<String>("csrf").unwrap(), "bar");
+//!     assert_eq!(form.get_string("username").unwrap(), "johnny");
+//!     assert_eq!(form.get_string("password").unwrap(), "foobar-123");
+//!     assert_eq!(form.get_string("csrf").unwrap(), "bar");
 //! }
 //! ```
 

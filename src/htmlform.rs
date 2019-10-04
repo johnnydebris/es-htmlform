@@ -28,7 +28,7 @@ use crate::types::{
 ///         .submit(None, "Submit", vec![]).unwrap();
 ///     form.update(&values, true);
 ///     assert_eq!(form.errors.len(), 0);
-///     assert_eq!(form.getone::<String>("foo").unwrap(), "bar");
+///     assert_eq!(form.get_string("foo").unwrap(), "bar");
 /// }
 /// ```
 #[derive(Debug)]
@@ -118,9 +118,9 @@ impl <'a> HtmlForm<'a> {
         Err(FormError::new(&format!("no field named {}", name)))
     }
 
-    /// Return a list of values of a field. Returns an error when the
-    /// field is not found, when the values can not be converted (parsed) or
-    /// when the field has no value.
+    /// Return a list of values of a field, parsed to `T`. Returns an error
+    /// when the field is not found, when the values can not be converted
+    /// (parsed) or when the field has no value.
     pub fn get<T>(&self, name: &str) ->
             Result<Vec<T>, FormError>
             where T: FromStr {
@@ -143,9 +143,9 @@ impl <'a> HtmlForm<'a> {
             &format!("field {} not found", name)))
     }
 
-    /// Return a single value for a field. Returns an error when the
-    /// field is not found, when more than one value is found, when the
-    /// value can not be converted (parsed) or when the field has no value.
+    /// Return a single value for a field, parsed to `T`. Returns an error
+    /// when the field is not found, when more than one value is found, when
+    /// the value can not be converted (parsed) or when the field has no value.
     pub fn getone<T>(&self, name: &str) ->
             Result<T, FormError>
             where T: FromStr {
@@ -178,6 +178,31 @@ impl <'a> HtmlForm<'a> {
             }
         }
         Err(FormError::new(&format!("field {} not found", name)))
+    }
+
+    /// Return a list of values of a field, as `String`s. Returns an error when
+    /// the field is not found or when the field has no value.
+    pub fn get_strings(&self, name: &str) -> Result<Vec<String>, FormError> {
+        for field in &self.fields {
+            if field.name == name {
+                return match &field.values {
+                    Some(values) => {
+                        Ok(values.iter().map(|v| v.as_string()).collect())
+                    },
+                    None => Err(FormError::new(
+                        &format!("field {} has no value", name))),
+                };
+            }
+        }
+        Err(FormError::new(
+            &format!("field {} not found", name)))
+    }
+
+    /// Return a single value for a field as `String`. Returns an error
+    /// when the field is not found, when more than one value is found,
+    /// or when the field has no value.
+    pub fn get_string(&self, name: &str) -> Result<String, FormError> {
+        self.getone::<String>(name)
     }
 
     /// Shortcut to create an `input` element, use this for non-collection
