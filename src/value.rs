@@ -98,7 +98,7 @@ pub fn urldecode(input: &[u8]) -> Result<String, UrlDecodingError<'static>> {
 /// strings, similar to how urlencoded form data is treated (no type
 /// information, any field may appear more than once and there doesn't need
 /// to be a value).
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ValueMap {
     values: HashMap<String, Vec<Value>>,
 }
@@ -197,7 +197,7 @@ impl Deref for ValueMap {
 
 /// A single form value, stored as `String`. May be empty in some cases,
 /// which results in the value being ignored in validation.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Value(String);
 
 impl Value {
