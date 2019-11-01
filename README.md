@@ -25,7 +25,7 @@ client and on the server.
         form.update(&values, true);
 
         assert_eq!(form.errors.len(), 0);
-        assert_eq!(form.getone::<String>("q").unwrap(), "foo");
+        assert_eq!(form.get_string("q").unwrap(), "foo");
 
         println!("{}", serde_json::to_string_pretty(&form));
     }

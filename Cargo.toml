@@ -4,7 +4,15 @@ version = "0.1.0"
 authors = ["Guido Wesdorp <johnnydebris@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "Apache-2.0/MIT"
+
+documentation = "https://docs.rs/es-htmlform/"
+homepage = "https://github.com/johnnydebris/es-htmlform"
+repository = "https://github.com/johnnydebris/es-htmlform"
+
+description = "Library for building and validating HTML(5) forms."
+keywords = ["html", "form", "validation"]
+categories = ["web-programming"]
 
 [dependencies]
 serde = "1.0"
