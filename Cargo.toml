@@ -1,5 +1,5 @@
 [package]
-name = "htmlform"
+name = "es-htmlform"
 version = "0.1.0"
 authors = ["Guido Wesdorp <johnnydebris@gmail.com>"]
 edition = "2018"
