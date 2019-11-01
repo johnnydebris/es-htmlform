@@ -14,9 +14,9 @@ use crate::types::{
 /// builder-style API makes it relatively easy to define forms:
 ///
 /// ```rust
-/// use htmlform::HtmlForm;
-/// use htmlform::value::ValueMap;
-/// use htmlform::types::{Method, InputType, Constraint, Attr};
+/// use es_htmlform::HtmlForm;
+/// use es_htmlform::value::ValueMap;
+/// use es_htmlform::types::{Method, InputType, Constraint, Attr};
 ///
 /// fn main() {
 ///     // user input
@@ -60,9 +60,9 @@ impl <'a> HtmlForm<'a> {
     /// Example:
     ///
     /// ```rust
-    /// use htmlform::HtmlForm;
-    /// use htmlform::value::ValueMap;
-    /// use htmlform::types::{Method, InputType, Constraint};
+    /// use es_htmlform::HtmlForm;
+    /// use es_htmlform::value::ValueMap;
+    /// use es_htmlform::types::{Method, InputType, Constraint};
     ///
     /// fn main() {
     ///     let mut form = HtmlForm::new(".", Method::Post)

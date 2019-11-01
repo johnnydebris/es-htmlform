@@ -1,9 +1,9 @@
 //! Library to validate and generate HTML forms.
 //!
 //! ```rust
-//! use htmlform::{HtmlForm, FormError, ValidationError};
-//! use htmlform::value::ValueMap;
-//! use htmlform::types::{InputType, Method, Constraint as Cons, Attr};
+//! use es_htmlform::{HtmlForm, FormError, ValidationError};
+//! use es_htmlform::value::ValueMap;
+//! use es_htmlform::types::{InputType, Method, Constraint as Cons, Attr};
 //!
 //! // simple form with 1 field
 //! fn searchform() -> Result<HtmlForm<'static>, FormError> {
@@ -39,6 +39,7 @@
 //!             InputType::Number, "age", "Age", true,
 //!             vec![Cons::MinNumber(18.0)],
 //!             vec![Attr::StepInt(1), Attr::Any("id", "age")])?
+//!         .textarea("message", "Message", false, vec![], vec![])?
 //!         .hidden(
 //!             "csrf", Some("foo"), true,
 //!             vec![Cons::Func(Box::new(|v| {
@@ -49,7 +50,6 @@
 //!                 }
 //!             }))],
 //!             vec![])?
-//!         .textarea("message", "Message", false, vec![], vec![])?
 //!         .submit(None, "Submit", vec![])?
 //!     )
 //! }

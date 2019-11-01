@@ -1,4 +1,4 @@
-use htmlform::value::{ValueMap, Value, urldecode, UrlDecodingError};
+use es_htmlform::value::{ValueMap, Value, urldecode, UrlDecodingError};
 
 #[test]
 fn test_parse_urlencoded_one_key_one_val() {

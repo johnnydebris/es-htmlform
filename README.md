@@ -1,16 +1,16 @@
-# HtmlForm
+# es-htmlform
 
-HtmlForm is a Rust library to build, validate and render HTML(5) forms. It aims
-to follow the HTML specifications as closely as possible, and to provide a
+es-htmlform is a Rust library to build, validate and render HTML(5) forms. It
+aims to follow the HTML specifications as closely as possible, and to provide a
 complete solution to easily build correct forms and validate data both in the
 client and on the server.
 
 ## Example
 
 ```rust
-    use htmlform::HtmlForm;
-    use htmlform::value::ValueMap;
-    use htmlform::types::{Method, InputType, Constraint, Attr};
+    use es_htmlform::HtmlForm;
+    use es_htmlform::value::ValueMap;
+    use es_htmlform::types::{Method, InputType, Constraint, Attr};
 
     fn main() {
         let mut form = HtmlForm::new(".", Method::Get)

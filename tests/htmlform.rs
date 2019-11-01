@@ -1,6 +1,6 @@
-use htmlform::HtmlForm;
-use htmlform::value::{ValueMap, Value};
-use htmlform::types::{Method, Element, InputType, Attr, Constraint};
+use es_htmlform::HtmlForm;
+use es_htmlform::value::{ValueMap, Value};
+use es_htmlform::types::{Method, Element, InputType, Attr, Constraint};
 
 fn testform() -> HtmlForm<'static> {
     HtmlForm::new(".", Method::Post)
