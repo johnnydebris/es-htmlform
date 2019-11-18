@@ -391,6 +391,11 @@ impl <'a> HtmlForm<'a> {
             constraints, attributes));
         Ok(self)
     }
+
+    pub fn add(mut self, field: Field<'a>) -> Self {
+        self.fields.push(field);
+        self
+    }
 }
 
 impl <'a> Serialize for HtmlForm<'a> {
@@ -524,6 +529,58 @@ impl <'a> Field<'a> {
             clone.push(Value::new(&value.as_string()));
         }
         self.values = Some(clone);
+    }
+
+    // Builder functions
+
+    /// Build an `<input type="text" />`.
+    pub fn text(name: &'a str, label: &'a str, required: bool) -> Self {
+        let element = Element::Input(InputType::Text);
+        Field {
+            name,
+            label,
+            element,
+            required,
+            choices: &[],
+            constraints: vec![],
+            attributes: vec![],
+            values: None,
+        }
+    }
+
+    /// Build an `<input type="number" />`.
+    pub fn number(name: &'a str, label: &'a str, required: bool) -> Self {
+        let element = Element::Input(InputType::Number);
+        Field {
+            name,
+            label,
+            element,
+            required,
+            choices: &[],
+            constraints: vec![],
+            attributes: vec![],
+            values: None,
+        }
+    }
+
+    // Modifiers for builder methods
+
+    /// Add constraints, returns self.
+    pub fn constraints(mut self, constraints: Vec<Constraint<'a>>)
+            -> Result<Self, FormError> {
+        for constraint in constraints {
+            self.constraints.push(constraint);
+        }
+        Ok(self)
+    }
+
+    /// Add attributes, returns self.
+    pub fn attributes(mut self, attributes: Vec<Attr<'a>>)
+            -> Result<Self, FormError> {
+        for attribute in attributes {
+            self.attributes.push(attribute);
+        }
+        Ok(self)
     }
 }
 
