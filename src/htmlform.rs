@@ -18,7 +18,6 @@ use crate::types::{
 /// use es_htmlform::value::ValueMap;
 /// use es_htmlform::types::{Method, InputType, Constraint, Attr};
 ///
-/// fn main() {
 ///     // user input
 ///     let values = ValueMap::from_urlencoded(b"foo=bar").unwrap();
 ///     let mut form = HtmlForm::new(".", Method::Post)
@@ -29,7 +28,6 @@ use crate::types::{
 ///     form.update(&values, true);
 ///     assert_eq!(form.errors.len(), 0);
 ///     assert_eq!(form.get_string("foo").unwrap(), "bar");
-/// }
 /// ```
 #[derive(Debug)]
 pub struct HtmlForm<'a> {
@@ -64,7 +62,6 @@ impl <'a> HtmlForm<'a> {
     /// use es_htmlform::value::ValueMap;
     /// use es_htmlform::types::{Method, InputType, Constraint};
     ///
-    /// fn main() {
     ///     let mut form = HtmlForm::new(".", Method::Post)
     ///         .input(
     ///             InputType::Text, "foo", "Foo", true,
@@ -75,7 +72,6 @@ impl <'a> HtmlForm<'a> {
     ///         form.errors.get("foo").unwrap(),
     ///         "Must be at least 5 characters long.");
     ///     assert_eq!(form.get::<String>("foo").unwrap(), vec!["bar"]);
-    /// }
     /// ```
     pub fn update(&mut self, values: &ValueMap, check_required: bool) {
         self.errors.drain();
@@ -87,7 +83,6 @@ impl <'a> HtmlForm<'a> {
                         String::from("field can only have one value"));
                 } else {
                     let values: Vec<&Value> = values.iter()
-                        .map(|v| v)
                         .collect();
                     if let Err(e) = field.validate(&values) {
                         self.errors.insert(
