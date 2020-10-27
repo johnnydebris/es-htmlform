@@ -135,7 +135,7 @@ impl ValueMap {
         let mut bvalue = vec![];
         let mut in_value = false;
         for chr in input {
-            let chr = chr.clone();
+            let chr = *chr;
             if chr == eq {
                 if !in_value {
                     in_value = true;
@@ -147,12 +147,9 @@ impl ValueMap {
                 let key = urldecode(&bkey)?;
                 let value = urldecode(&bvalue)?;
                 if !bvalue.is_empty() {
-                    if values.contains_key(&key) {
-                        let keyvalues = values.get_mut(&key).unwrap();
-                        keyvalues.push(Value::new(&value));
-                    } else {
-                        values.insert(key, vec![Value::new(&value)]);
-                    }
+                    values.entry(key)
+                        .and_modify(|e| e.push(Value::new(&value)))
+                        .or_insert(vec![Value::new(&value)]);
                 } else {
                     values.insert(key, vec![]);
                 }
@@ -170,12 +167,9 @@ impl ValueMap {
             let key = urldecode(&bkey)?;
             let value = urldecode(&bvalue)?;
             if !bvalue.is_empty() {
-                if values.contains_key(&key) {
-                    let keyvalues = values.get_mut(&key).unwrap();
-                    keyvalues.push(Value::new(&value));
-                } else {
-                    values.insert(key, vec![Value::new(&value)]);
-                }
+                values.entry(key)
+                    .and_modify(|e| e.push(Value::new(&value)))
+                    .or_insert(vec![Value::new(&value)]);
             } else {
                 values.insert(key, vec![]);
             }

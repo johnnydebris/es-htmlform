@@ -62,15 +62,9 @@ fn validate_email(email: &str) -> Result<(), ValidationError> {
 }
 
 fn validate_url(url: &str) -> Result<(), ValidationError> {
-    // rather naive reg, but it should catch most common issues and should
-    // not lead to false negatives - proper url checking is near impossible
-    // using regexps, so I don't want to go there...
-    let reg_url = Regex::new(r"^\w+\:\/\/\w[-\.\w]+(\/\S*)?$").unwrap();
-    if !reg_url.is_match(url) {
-        Err(ValidationError::new(&format!("Invalid url {}", url)))
-    } else {
-        Ok(())
-    }
+    url::Url::parse(url)
+        .map(|_| ())
+        .map_err(|err| ValidationError::new(&format!("{}", err)))
 }
 
 /// Form methods, correspond to `method` attribute values (note that these
@@ -182,11 +176,8 @@ impl Element {
     /// Return `true` for multi-selects and checkbox inputs, used by
     /// `HtmlForm` to fill its `multi` attribute.
     pub fn multi(&self) -> bool {
-        match self {
-            Element::Input(InputType::Checkbox) |
-            Element::Select(SelectType::Multi) => true,
-            _ => false,
-        }
+        matches!(self, Element::Input(InputType::Checkbox) |
+                 Element::Select(SelectType::Multi))
     }
 }
 
@@ -291,7 +282,7 @@ pub enum Constraint<'a> {
     Pattern(&'a str),
     /// Constraint on any field, is executed server-side only and not
     /// serialized.
-    Func(Box<Fn(&Value) -> Result<(), ValidationError>>),
+    Func(Box<dyn Fn(&Value) -> Result<(), ValidationError>>),
 }
 
 impl <'a> Constraint<'a> {
@@ -425,7 +416,7 @@ impl <'a> Constraint<'a> {
                 if !reg.is_match(&value) {
                     return Err(
                         ValidationError::new(
-                            &format!("Please match the format requested.")));
+                            &"Please match the format requested.".to_string()));
                 }
             },
             Constraint::Func(validator) => {
@@ -483,38 +474,22 @@ impl <'a> Constraint<'a> {
                 },
                 _ => false,
             },
-            Constraint::MinNumber(_) => match element {
-                Element::Input(InputType::Number) => true,
-                _ => false,
-            },
-            Constraint::MaxNumber(_) => match element {
-                Element::Input(InputType::Number) => true,
-                _ => false,
-            },
-            Constraint::MinDate(_) => match element {
-                Element::Input(InputType::Date) => true,
-                _ => false,
-            },
-            Constraint::MaxDate(_) => match element {
-                Element::Input(InputType::Date) => true,
-                _ => false,
-            },
-            Constraint::MinTime(_) => match element {
-                Element::Input(InputType::Time) => true,
-                _ => false,
-            },
-            Constraint::MaxTime(_) => match element {
-                Element::Input(InputType::Time) => true,
-                _ => false,
-            },
-            Constraint::MinDateTime(_) => match element {
-                Element::Input(InputType::DateTime) => true,
-                _ => false,
-            },
-            Constraint::MaxDateTime(_) => match element {
-                Element::Input(InputType::DateTime) => true,
-                _ => false,
-            },
+            Constraint::MinNumber(_) =>
+                matches!(element, Element::Input(InputType::Number)),
+            Constraint::MaxNumber(_) =>
+                matches!(element, Element::Input(InputType::Number)),
+            Constraint::MinDate(_) =>
+                matches!(element, Element::Input(InputType::Date)),
+            Constraint::MaxDate(_) =>
+                matches!(element, Element::Input(InputType::Date)),
+            Constraint::MinTime(_) =>
+                matches!(element, Element::Input(InputType::Time)),
+            Constraint::MaxTime(_) =>
+                matches!(element, Element::Input(InputType::Time)),
+            Constraint::MinDateTime(_) =>
+                matches!(element, Element::Input(InputType::DateTime)),
+            Constraint::MaxDateTime(_) =>
+                matches!(element, Element::Input(InputType::DateTime)),
             Constraint::Pattern(_) => match element {
                 Element::Textarea => true,
                 Element::Input(input_type) => match input_type {
@@ -675,10 +650,8 @@ impl <'a> Attr<'a> {
                 // title makes no sense on some elements, but does seem
                 // to be allowed on all...
                 Attr::Title(_) => true,
-                Attr::StepFloat(_) => match input_type {
-                    InputType::Number => true,
-                    _ => false,
-                },
+                Attr::StepFloat(_) =>
+                    matches!(input_type, InputType::Number),
                 Attr::StepInt(_) => match input_type {
                     InputType::Number |
                     InputType::Date |
@@ -700,15 +673,10 @@ impl <'a> Attr<'a> {
                 Attr::Wrap(_) => false,
                 Attr::FormAction(_) |
                 Attr::FormEnctype(_) |
-                Attr::FormTarget(_) => match input_type {
-                    InputType::Submit |
-                    InputType::Image => true,
-                    _ => false,
-                },
-                Attr::FormNoValidate => match input_type {
-                    InputType::Submit => true,
-                    _ => false,
-                },
+                Attr::FormTarget(_) =>
+                    matches!(input_type, InputType::Submit | InputType::Image),
+                Attr::FormNoValidate =>
+                    matches!(input_type, InputType::Submit),
                 Attr::Placeholder(_) => match input_type {
                     InputType::Text |
                     InputType::Password |
@@ -764,32 +732,8 @@ impl <'a> Attr<'a> {
                 Attr::Wrap(_) => true,
                 _ => false,
             },
-            Element::Select(_) => match self {
-                Attr::Any(_, _) |
-                Attr::Id(_) |
-                Attr::Title(_) |
-                Attr::Autocomplete(_) |
-                Attr::Autofocus |
-                Attr::Disabled |
-                Attr::Readonly |
-                Attr::Size(_) |
-                _ => false,
-            },
-            Element::Button(_) => match self {
-                Attr::Any(_, _) |
-                Attr::Id(_) |
-                Attr::Title(_) |
-                Attr::Autocomplete(_) |
-                Attr::Autofocus |
-                Attr::Disabled |
-                Attr::Readonly |
-                Attr::FormAction(_) |
-                Attr::FormEnctype(_) |
-                Attr::FormTarget(_) |
-                Attr::FormNoValidate |
-                Attr::Size(_) |
-                _ => false,
-            },
+            Element::Select(_) => false,
+            Element::Button(_) => false,
         }
     }
 }
